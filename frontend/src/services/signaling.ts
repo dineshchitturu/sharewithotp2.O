@@ -1,5 +1,6 @@
 import type { SignalingMessage } from '../types/signaling';
 import type { TransferState } from '../types/transfer';
+import { getApiBase } from './api';
 
 export type SignalingEventHandler = (message: SignalingMessage) => void;
 
@@ -27,9 +28,15 @@ export class SignalingClient {
       this.isIntentionallyClosed = false;
 
       const explicitWsBase = import.meta.env.VITE_WS_URL;
+      const apiBase = getApiBase();
       let url: string;
+
       if (explicitWsBase) {
-        url = `${explicitWsBase}/ws/signaling/${encodeURIComponent(this.roomId)}?role=${this.role}&token=${encodeURIComponent(this.token)}`;
+        const cleanWs = explicitWsBase.replace(/\/+$/, '');
+        url = `${cleanWs}/ws/signaling/${encodeURIComponent(this.roomId)}?role=${this.role}&token=${encodeURIComponent(this.token)}`;
+      } else if (apiBase) {
+        const wsFromApi = apiBase.replace(/^http/, 'ws');
+        url = `${wsFromApi}/ws/signaling/${encodeURIComponent(this.roomId)}?role=${this.role}&token=${encodeURIComponent(this.token)}`;
       } else {
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         url = `${protocol}//${window.location.host}/ws/signaling/${encodeURIComponent(this.roomId)}?role=${this.role}&token=${encodeURIComponent(this.token)}`;

@@ -1,10 +1,12 @@
 import asyncio
 import logging
+import os
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 from app.api.routes import rooms_router, signaling_router
 from app.config.settings import get_settings
@@ -52,15 +54,26 @@ app = FastAPI(
 )
 
 settings = get_settings()
+cors_origins = settings.CORS_ORIGINS
 
 # Setup CORS for frontend clients
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# When wildcard origin is requested with credentials, browsers require regex or origin reflection
+if "*" in cors_origins:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origin_regex=".*",
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+else:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=cors_origins,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
 # Register API Routers
 app.include_router(rooms_router)
@@ -78,10 +91,30 @@ async def health_check():
     }
 
 
-@app.get("/", tags=["Root"])
-async def root():
-    return {
-        "name": "ShareWithOTP - Privacy-First P2P Transfer API",
-        "version": "1.0.0",
-        "docs_url": "/docs",
-    }
+# Static Frontend Hosting Fallback (if built dist directory exists)
+frontend_dist = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), "..", "..", "frontend", "dist")
+)
+
+if os.path.isdir(frontend_dist):
+    assets_dir = os.path.join(frontend_dist, "assets")
+    if os.path.isdir(assets_dir):
+        app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
+
+    @app.get("/{full_path:path}", tags=["Frontend"])
+    async def serve_frontend(full_path: str):
+        # Exclude API endpoints from SPA fallback
+        if full_path.startswith("api") or full_path.startswith("ws") or full_path in ("docs", "openapi.json"):
+            raise HTTPException(status_code=404, detail="API route not found.")
+        file_target = os.path.join(frontend_dist, full_path)
+        if full_path and os.path.isfile(file_target):
+            return FileResponse(file_target)
+        return FileResponse(os.path.join(frontend_dist, "index.html"))
+else:
+    @app.get("/", tags=["Root"])
+    async def root():
+        return {
+            "name": "ShareWithOTP - Privacy-First P2P Transfer API",
+            "version": "1.0.0",
+            "docs_url": "/docs",
+        }

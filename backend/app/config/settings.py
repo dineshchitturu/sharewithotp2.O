@@ -1,6 +1,8 @@
+import json
 import os
 from functools import lru_cache
-from typing import List
+from typing import Any, List
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -16,8 +18,8 @@ class Settings(BaseSettings):
     # Security
     JWT_SECRET: str = "temporary-p2p-session-secret-change-in-prod"
 
-    # CORS origins for frontend access
-    CORS_ORIGINS: List[str] = [
+    # CORS origins for frontend access (supports JSON array or comma-separated list or '*')
+    CORS_ORIGINS: Any = [
         "http://localhost:5173",
         "http://127.0.0.1:5173",
         "http://localhost:3000",
@@ -32,6 +34,21 @@ class Settings(BaseSettings):
 
     # P2P Chunk configuration recommended defaults
     DEFAULT_CHUNK_SIZE: int = 65536  # 64 KB
+
+    @field_validator("CORS_ORIGINS", mode="before")
+    @classmethod
+    def parse_cors_origins(cls, v: Any) -> List[str]:
+        if isinstance(v, str):
+            clean = v.strip()
+            if clean == "*":
+                return ["*"]
+            if clean.startswith("[") and clean.endswith("]"):
+                try:
+                    return json.loads(clean)
+                except Exception:
+                    pass
+            return [item.strip() for item in clean.split(",") if item.strip()]
+        return v
 
     model_config = SettingsConfigDict(
         env_file=".env",
