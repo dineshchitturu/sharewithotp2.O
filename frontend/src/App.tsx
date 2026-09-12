@@ -3,7 +3,8 @@ import { Home } from './pages/Home';
 import { Send } from './pages/Send';
 import { Receive } from './pages/Receive';
 import { ServerSettingsModal } from './components/ServerSettingsModal';
-import { ShieldCheck, ArrowLeftRight, Settings as SettingsIcon } from 'lucide-react';
+import { isBackendConfigured } from './services/api';
+import { ShieldCheck, ArrowLeftRight, Settings as SettingsIcon, AlertTriangle } from 'lucide-react';
 
 export function App() {
   const [currentView, setCurrentView] = useState<'home' | 'send' | 'receive'>('home');
@@ -59,6 +60,22 @@ export function App() {
         </div>
       </header>
 
+      {/* Warning banner when deployed on remote host without backend configured */}
+      {!isBackendConfigured() && (
+        <div className="bg-amber-950/80 border-b border-amber-800/90 px-4 py-2.5 text-center text-xs text-amber-200 flex items-center justify-center gap-2 flex-wrap">
+          <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+          <span>
+            Backend not connected: Running on deployed domain ({typeof window !== 'undefined' ? window.location.hostname : 'remote'}).
+          </span>
+          <button
+            onClick={() => setIsSettingsOpen(true)}
+            className="font-bold underline text-white hover:text-amber-100 ml-1 cursor-pointer"
+          >
+            Connect FastAPI Backend URL →
+          </button>
+        </div>
+      )}
+
       {/* Main Content Area */}
       <main className="flex-1 flex flex-col justify-center">
         {currentView === 'home' && <Home onNavigate={setCurrentView} />}
@@ -75,7 +92,7 @@ export function App() {
           <div className="flex items-center gap-3">
             <button
               onClick={() => setIsSettingsOpen(true)}
-              className="text-slate-500 hover:text-slate-300 underline font-mono text-[11px]"
+              className="text-slate-500 hover:text-slate-300 underline font-mono text-[11px] cursor-pointer"
             >
               Configure Backend URL
             </button>

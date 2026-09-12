@@ -29,6 +29,19 @@ export function setCustomApiBase(url: string): void {
   }
 }
 
+/**
+ * Determines whether a remote backend is configured or if we are in local dev.
+ */
+export function isBackendConfigured(): boolean {
+  if (typeof window !== 'undefined') {
+    const host = window.location.hostname;
+    if (host === 'localhost' || host === '127.0.0.1') {
+      return true;
+    }
+  }
+  return Boolean(getApiBase());
+}
+
 export interface CreateRoomResponse {
   room_id: string;
   otp: string;
@@ -103,16 +116,15 @@ async function safeParseResponse<T>(response: Response, endpointDescription: str
     if (parsedJson) {
       errorDetail = parsedJson.detail || parsedJson.message || JSON.stringify(parsedJson);
     } else if (text) {
-      // If server returned plain text or HTML error page
       errorDetail = text.length > 250 ? text.slice(0, 250) + '...' : text;
     }
 
     if (!errorDetail) {
       const currentBase = getApiBase();
       if (response.status === 404) {
-        errorDetail = `API endpoint not found (HTTP 404). If frontend and backend are deployed on different services (e.g. Vercel & Render), configure your backend URL in Server Settings. Active API base: '${currentBase || '(relative /api)'}'`;
+        errorDetail = `API endpoint not found (HTTP 404). If frontend and backend are deployed separately, configure your backend URL in Server Settings. Active API base: '${currentBase || '(relative /api)'}'`;
       } else if (response.status === 502 || response.status === 503 || response.status === 504) {
-        errorDetail = `Backend server is spinning up or temporarily unreachable (HTTP ${response.status} ${response.statusText}). Please wait 15 seconds and try again.`;
+        errorDetail = `Backend server is waking up or temporarily unreachable (HTTP ${response.status} ${response.statusText}). Please wait 15 seconds and try again.`;
       } else {
         errorDetail = `Server returned HTTP ${response.status} (${response.statusText || 'Error'}) with empty response.`;
       }
@@ -122,8 +134,11 @@ async function safeParseResponse<T>(response: Response, endpointDescription: str
   }
 
   // Response was OK (200..299)
-  if (!text) {
-    return {} as T;
+  if (!text || text.trim().length === 0) {
+    const currentBase = getApiBase();
+    throw new Error(
+      `Received empty response (0 bytes) from server. Your frontend is connecting to '${currentBase || window.location.host}' instead of your FastAPI backend. Click 'Server' in the top bar to set your Backend URL.`
+    );
   }
 
   if (parsedJson !== null) {
@@ -134,7 +149,7 @@ async function safeParseResponse<T>(response: Response, endpointDescription: str
     return JSON.parse(text) as T;
   } catch {
     throw new Error(
-      `Unexpected response from ${endpointDescription} (HTTP ${response.status}): expected JSON but received non-JSON payload.`
+      `Expected JSON from ${endpointDescription}, but received: ${text.slice(0, 150)}`
     );
   }
 }
@@ -156,7 +171,14 @@ export async function createRoom(roomId: string): Promise<CreateRoomResponse> {
     );
   }
 
-  return safeParseResponse<CreateRoomResponse>(response, 'POST /api/rooms');
+  const data = await safeParseResponse<CreateRoomResponse>(response, 'POST /api/rooms');
+  if (!data || !data.room_id || !data.otp) {
+    throw new Error(
+      `Invalid response from backend (missing room_id or otp). Please ensure your Backend URL in Server Settings points to the FastAPI backend.`
+    );
+  }
+
+  return data;
 }
 
 export async function verifyOTP(roomId: string, otp: string): Promise<VerifyOTPResponse> {
@@ -177,7 +199,14 @@ export async function verifyOTP(roomId: string, otp: string): Promise<VerifyOTPR
     );
   }
 
-  return safeParseResponse<VerifyOTPResponse>(response, `POST /api/rooms/${cleanRoomId}/verify`);
+  const data = await safeParseResponse<VerifyOTPResponse>(response, `POST /api/rooms/${cleanRoomId}/verify`);
+  if (data.success && !data.session_token) {
+    throw new Error(
+      `Invalid response from backend (missing session_token). Please check your backend URL in Server Settings.`
+    );
+  }
+
+  return data;
 }
 
 export async function getRoomStatus(roomId: string): Promise<RoomStatusResponse> {

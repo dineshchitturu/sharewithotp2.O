@@ -61,9 +61,18 @@ export class SignalingClient {
       this.ws.onclose = (event) => {
         this.stopHeartbeat();
         if (!this.isIntentionallyClosed) {
+          let errorMsg = event.reason || `WebSocket closed (code: ${event.code})`;
+          if (event.code === 1006) {
+            const currentBase = getApiBase();
+            if (!currentBase && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+              errorMsg = `WebSocket closed (code: 1006). Your frontend is connecting to '${window.location.host}' (which does not support WebSockets). Click 'Server' in the top bar to connect your deployed FastAPI backend URL (e.g. https://your-backend.onrender.com).`;
+            } else {
+              errorMsg = `WebSocket signaling connection failed (code: 1006). Please verify that your backend server is awake and supports WebSockets.`;
+            }
+          }
           this.emit({
             type: 'error',
-            message: event.reason || `WebSocket closed (code: ${event.code})`,
+            message: errorMsg,
           });
         }
       };
