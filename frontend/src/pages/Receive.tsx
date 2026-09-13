@@ -25,6 +25,7 @@ export const Receive: React.FC<ReceiveProps> = ({ onBack }) => {
   const [attemptsRemaining, setAttemptsRemaining] = useState<number | null>(null);
   const [isHashVerified, setIsHashVerified] = useState<boolean>(true);
   const [computedHash, setComputedHash] = useState<string>('');
+  const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
 
   const signalingRef = useRef<SignalingClient | null>(null);
   const webrtcRef = useRef<WebRTCManager | null>(null);
@@ -112,9 +113,10 @@ export const Receive: React.FC<ReceiveProps> = ({ onBack }) => {
                 setFileSize(prog.totalBytes);
               }
             },
-            onComplete: (_url, hashVerified, hash) => {
+            onComplete: (url, hashVerified, hash) => {
               isCompletedRef.current = true;
               setErrorMessage(null);
+              if (url) setDownloadUrl(url);
               setIsHashVerified(Boolean(hashVerified));
               setComputedHash(hash || '');
               setTransferState('COMPLETED');
@@ -203,6 +205,7 @@ export const Receive: React.FC<ReceiveProps> = ({ onBack }) => {
     setRoomId('');
     setFileName('Receiving File...');
     setFileSize(0);
+    setDownloadUrl(null);
     setTransferState('CREATED');
     setProgress(null);
     setErrorMessage(null);
@@ -255,6 +258,7 @@ export const Receive: React.FC<ReceiveProps> = ({ onBack }) => {
           fileSize={fileSize}
           hashVerified={isHashVerified}
           computedHash={computedHash}
+          downloadUrl={downloadUrl || undefined}
           onReset={handleReset}
         />
       )}

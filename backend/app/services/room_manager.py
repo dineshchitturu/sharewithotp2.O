@@ -44,13 +44,21 @@ class RoomManager:
         async with self._lock:
             existing = self._rooms.get(clean_room_id)
             if existing:
-                if existing.is_destroyed:
-                    raise ValueError(f"Transfer session '{clean_room_id}' has already completed and been destroyed. Please use a new Room ID.")
-                elif not existing.is_expired():
-                    raise ValueError(f"Room ID '{clean_room_id}' is currently active. Please choose a different Room ID.")
+                if (
+                    existing.is_destroyed
+                    or existing.is_expired()
+                    or existing.state in (
+                        SessionState.COMPLETED,
+                        SessionState.CANCELLED,
+                        SessionState.FAILED,
+                        SessionState.DESTROYED,
+                        SessionState.EXPIRED,
+                    )
+                ):
+                    # Clean up previous session and allow fresh reuse of the Room ID
+                    await self._purge_room_internal(clean_room_id, reason="reused")
                 else:
-                    # Clean up previously expired session
-                    await self._purge_room_internal(clean_room_id)
+                    raise ValueError(f"Room ID '{clean_room_id}' is currently active. Please choose a different Room ID.")
 
             plaintext_otp = generate_secure_otp()
             salt = generate_salt()
@@ -179,7 +187,7 @@ class RoomManager:
             await self._purge_room_internal(clean_room_id, reason)
 
     async def _purge_room_internal(self, clean_room_id: str, reason: str = "transfer_completed") -> None:
-        session = self._rooms.get(clean_room_id)
+        session = self._rooms.pop(clean_room_id, None)
         if session:
             session.is_destroyed = True
             session.state = SessionState.DESTROYED
@@ -194,7 +202,7 @@ class RoomManager:
             except Exception:
                 pass
 
-        logger.info(f"Room '{clean_room_id}' completely destroyed ({reason}).")
+        logger.info(f"Room '{clean_room_id}' completely destroyed and purged from memory ({reason}).")
 
     async def cleanup_expired_rooms(self) -> int:
         """Scan and evict expired rooms."""

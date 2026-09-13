@@ -31,6 +31,8 @@ export const Send: React.FC<SendProps> = ({ onBack }) => {
   const webrtcRef = useRef<WebRTCManager | null>(null);
   const fileSenderRef = useRef<FileSender | null>(null);
   const isCompletedRef = useRef<boolean>(false);
+  const selectedFileRef = useRef<File | null>(null);
+  const isStreamingRef = useRef<boolean>(false);
 
   useEffect(() => {
     return () => {
@@ -39,6 +41,7 @@ export const Send: React.FC<SendProps> = ({ onBack }) => {
   }, []);
 
   const cleanupTransfer = () => {
+    isStreamingRef.current = false;
     if (fileSenderRef.current) {
       fileSenderRef.current.cancel();
       fileSenderRef.current = null;
@@ -57,6 +60,7 @@ export const Send: React.FC<SendProps> = ({ onBack }) => {
     setIsLoading(true);
     setErrorMessage(null);
     isCompletedRef.current = false;
+    isStreamingRef.current = false;
 
     try {
       const resp = await createRoom(chosenRoomId);
@@ -93,8 +97,9 @@ export const Send: React.FC<SendProps> = ({ onBack }) => {
         dataChannel.onopen = () => {
           console.info('[Sender] DataChannel opened!');
           setTransferState('CONNECTED');
-          if (selectedFile) {
-            startStreaming(selectedFile, dataChannel);
+          const fileToStream = selectedFileRef.current;
+          if (fileToStream && !isStreamingRef.current) {
+            startStreaming(fileToStream, dataChannel);
           }
         };
 
@@ -166,6 +171,8 @@ export const Send: React.FC<SendProps> = ({ onBack }) => {
   };
 
   const startStreaming = (file: File, channel: RTCDataChannel) => {
+    if (isStreamingRef.current) return;
+    isStreamingRef.current = true;
     setStep('transferring');
     setTransferState('TRANSFERRING');
 
@@ -204,9 +211,11 @@ export const Send: React.FC<SendProps> = ({ onBack }) => {
   };
 
   const handleFileSelected = (file: File) => {
+    selectedFileRef.current = file;
     setSelectedFile(file);
-    if (webrtcRef.current?.dataChannel?.readyState === 'open') {
-      startStreaming(file, webrtcRef.current.dataChannel);
+    const channel = webrtcRef.current?.dataChannel;
+    if (channel && channel.readyState === 'open' && !isStreamingRef.current) {
+      startStreaming(file, channel);
     }
   };
 
@@ -222,6 +231,8 @@ export const Send: React.FC<SendProps> = ({ onBack }) => {
   const handleReset = () => {
     cleanupTransfer();
     isCompletedRef.current = false;
+    isStreamingRef.current = false;
+    selectedFileRef.current = null;
     setSelectedFile(null);
     setRoomId('');
     setOtp('');

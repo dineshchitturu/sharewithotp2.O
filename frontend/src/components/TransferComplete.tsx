@@ -1,5 +1,5 @@
 import React from 'react';
-import { CheckCircle2, FileCheck, RotateCcw, ShieldAlert, ShieldCheck } from 'lucide-react';
+import { ArrowDownToLine, CheckCircle2, FileCheck, RotateCcw, ShieldAlert, ShieldCheck } from 'lucide-react';
 import { formatBytes } from '../utils/formatBytes';
 
 interface TransferCompleteProps {
@@ -7,6 +7,7 @@ interface TransferCompleteProps {
   fileSize: number;
   hashVerified?: boolean;
   computedHash?: string;
+  downloadUrl?: string;
   onReset: () => void;
 }
 
@@ -15,6 +16,7 @@ export const TransferComplete: React.FC<TransferCompleteProps> = ({
   fileSize,
   hashVerified = true,
   computedHash,
+  downloadUrl,
   onReset,
 }) => {
   return (
@@ -61,6 +63,17 @@ export const TransferComplete: React.FC<TransferCompleteProps> = ({
       <div className="bg-slate-950/50 border border-slate-800/60 rounded-xl p-3 mb-6 text-xs text-slate-400 leading-relaxed">
         The temporary transfer session and room ID have been permanently destroyed. No files were stored on the server.
       </div>
+
+      {downloadUrl && (
+        <a
+          href={downloadUrl}
+          download={fileName}
+          className="w-full flex items-center justify-center gap-2 py-3 px-6 rounded-xl font-medium text-white bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 transition-colors shadow-lg shadow-emerald-600/20 mb-3 text-sm"
+        >
+          <ArrowDownToLine className="w-4 h-4" />
+          <span>Download File ({fileName})</span>
+        </a>
+      )}
 
       <button
         onClick={onReset}

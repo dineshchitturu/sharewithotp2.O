@@ -3,8 +3,8 @@ import type { FileMetadata, TransferProgress } from '../types/transfer';
 
 // Chunk size configuration (default 64 KB, within 64 KB - 256 KB recommended range)
 export const DEFAULT_CHUNK_SIZE = 64 * 1024; // 64 KB
-export const HIGH_WATER_MARK = 4 * 1024 * 1024; // 4 MB backpressure threshold
-export const LOW_WATER_MARK = 512 * 1024; // 512 KB resume threshold
+export const HIGH_WATER_MARK = 1024 * 1024; // 1 MB backpressure threshold (tighter buffer)
+export const LOW_WATER_MARK = 256 * 1024; // 256 KB resume threshold
 
 export interface TransferCallbacks {
   onProgress: (progress: TransferProgress) => void;
@@ -17,6 +17,9 @@ export class FileSender {
   private dataChannel: RTCDataChannel;
   private callbacks: TransferCallbacks;
   private chunkSize: number;
+  private totalBytes: number = 0;
+  private totalChunks: number = 0;
+  private transferStartTime: number = 0;
 
   constructor(
     dataChannel: RTCDataChannel,
@@ -39,6 +42,25 @@ export class FileSender {
           if (message.type === 'transfer_ack') {
             console.info('[FileSender] Received transfer_ack from receiver:', message);
             this.callbacks.onComplete(undefined, message.verified, message.hash);
+          } else if (message.type === 'transfer_progress') {
+            // Receiver reported acknowledged progress - synchronize sender in real-time
+            const rxBytes = message.bytesReceived || 0;
+            const rxPercentage = message.percentage || 0;
+            const now = performance.now();
+            const elapsedSec = (now - this.transferStartTime) / 1000;
+            const currentSpeed = elapsedSec > 0 ? rxBytes / elapsedSec : 0;
+            const remainingBytes = Math.max(0, this.totalBytes - rxBytes);
+            const remainingSeconds = currentSpeed > 0 ? remainingBytes / currentSpeed : 0;
+
+            this.callbacks.onProgress({
+              bytesTransferred: rxBytes,
+              totalBytes: this.totalBytes,
+              percentage: rxPercentage,
+              speedBytesPerSec: currentSpeed,
+              remainingSeconds,
+              currentChunk: Math.min(this.totalChunks, Math.ceil(rxBytes / this.chunkSize)),
+              totalChunks: this.totalChunks,
+            });
           }
         } catch {}
       }
@@ -54,8 +76,9 @@ export class FileSender {
 
   public async sendFile(file: File): Promise<void> {
     this.isCancelled = false;
-    const totalBytes = file.size;
-    const totalChunks = Math.ceil(totalBytes / this.chunkSize);
+    this.totalBytes = file.size;
+    this.totalChunks = Math.ceil(this.totalBytes / this.chunkSize);
+    this.transferStartTime = performance.now();
 
     // Initialize streaming WebAssembly SHA-256 hasher
     let hasher: any;
@@ -72,7 +95,7 @@ export class FileSender {
       size: file.size,
       type: file.type || 'application/octet-stream',
       lastModified: file.lastModified,
-      totalChunks,
+      totalChunks: this.totalChunks,
       chunkSize: this.chunkSize,
     };
 
@@ -87,14 +110,14 @@ export class FileSender {
     let bytesSinceLastProgress = 0;
     let currentSpeed = 0;
 
-    for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
+    for (let chunkIndex = 0; chunkIndex < this.totalChunks; chunkIndex++) {
       if (this.isCancelled) {
         this.callbacks.onError('Transfer cancelled by sender.');
         return;
       }
 
       const start = chunkIndex * this.chunkSize;
-      const end = Math.min(start + this.chunkSize, totalBytes);
+      const end = Math.min(start + this.chunkSize, this.totalBytes);
       const slice = file.slice(start, end);
 
       const arrayBuffer = await slice.arrayBuffer();
@@ -104,7 +127,7 @@ export class FileSender {
         hasher.update(uint8);
       }
 
-      // Backpressure management
+      // Backpressure management: wait if buffer exceeds HIGH_WATER_MARK
       if (this.dataChannel.bufferedAmount > HIGH_WATER_MARK) {
         await this.waitForBufferDrain();
       }
@@ -122,20 +145,22 @@ export class FileSender {
       const now = performance.now();
       const timeDeltaSec = (now - lastProgressTime) / 1000;
 
-      if (timeDeltaSec >= 0.2 || chunkIndex === totalChunks - 1) {
-        currentSpeed = bytesSinceLastProgress / timeDeltaSec;
-        const remainingBytes = totalBytes - bytesTransferred;
+      if (timeDeltaSec >= 0.15 || chunkIndex === this.totalChunks - 1) {
+        // Calculate true bytes that left the socket (subtracting pending buffer)
+        const netBytes = Math.max(0, bytesTransferred - this.dataChannel.bufferedAmount);
+        currentSpeed = bytesSinceLastProgress / (timeDeltaSec || 0.001);
+        const remainingBytes = Math.max(0, this.totalBytes - netBytes);
         const remainingSeconds = currentSpeed > 0 ? remainingBytes / currentSpeed : 0;
-        const percentage = Math.min(100, Math.round((bytesTransferred / totalBytes) * 100));
+        const percentage = Math.min(99, Math.round((netBytes / this.totalBytes) * 100));
 
         this.callbacks.onProgress({
-          bytesTransferred,
-          totalBytes,
+          bytesTransferred: netBytes,
+          totalBytes: this.totalBytes,
           percentage,
           speedBytesPerSec: currentSpeed,
           remainingSeconds,
           currentChunk: chunkIndex + 1,
-          totalChunks,
+          totalChunks: this.totalChunks,
         });
 
         lastProgressTime = now;
@@ -177,10 +202,13 @@ export class FileReceiver {
   private startTime: number = 0;
   private lastProgressTime: number = 0;
   private bytesSinceLastProgress: number = 0;
+  private lastReportTime: number = 0;
   private isCancelled: boolean = false;
   private hasher: any = null;
   private dataChannel: RTCDataChannel;
   private callbacks: TransferCallbacks;
+  private messageQueue: (string | ArrayBuffer)[] = [];
+  private isProcessingQueue: boolean = false;
 
   constructor(
     dataChannel: RTCDataChannel,
@@ -193,24 +221,41 @@ export class FileReceiver {
 
   private setupListeners(): void {
     this.dataChannel.binaryType = 'arraybuffer';
-    this.dataChannel.onmessage = async (event: MessageEvent) => {
+    this.dataChannel.onmessage = (event: MessageEvent) => {
       if (this.isCancelled) return;
-
-      if (typeof event.data === 'string') {
-        try {
-          const message = JSON.parse(event.data);
-          if (message.type === 'transfer_header') {
-            await this.handleHeader(message.metadata);
-          } else if (message.type === 'transfer_trailer') {
-            await this.handleTrailer(message.hash);
-          }
-        } catch (err) {
-          console.error('[FileReceiver] Error processing message:', err);
-        }
-      } else if (event.data instanceof ArrayBuffer) {
-        await this.handleChunk(event.data);
-      }
+      // Push into FIFO queue to ensure strict sequential processing (especially for small files)
+      this.messageQueue.push(event.data);
+      this.processQueue();
     };
+  }
+
+  private async processQueue(): Promise<void> {
+    if (this.isProcessingQueue) return;
+    this.isProcessingQueue = true;
+
+    try {
+      while (this.messageQueue.length > 0) {
+        if (this.isCancelled) break;
+        const data = this.messageQueue.shift()!;
+
+        if (typeof data === 'string') {
+          try {
+            const message = JSON.parse(data);
+            if (message.type === 'transfer_header') {
+              await this.handleHeader(message.metadata);
+            } else if (message.type === 'transfer_trailer') {
+              await this.handleTrailer(message.hash);
+            }
+          } catch (err) {
+            console.error('[FileReceiver] Error processing message:', err);
+          }
+        } else if (data instanceof ArrayBuffer) {
+          await this.handleChunk(data);
+        }
+      }
+    } finally {
+      this.isProcessingQueue = false;
+    }
   }
 
   public cancel(): void {
@@ -224,6 +269,7 @@ export class FileReceiver {
     this.bytesReceived = 0;
     this.startTime = performance.now();
     this.lastProgressTime = this.startTime;
+    this.lastReportTime = this.startTime;
     this.bytesSinceLastProgress = 0;
 
     try {
@@ -258,9 +304,9 @@ export class FileReceiver {
     const now = performance.now();
     const timeDeltaSec = (now - this.lastProgressTime) / 1000;
 
-    if (timeDeltaSec >= 0.2 || this.bytesReceived >= this.metadata.size) {
-      const speed = this.bytesSinceLastProgress / timeDeltaSec;
-      const remainingBytes = this.metadata.size - this.bytesReceived;
+    if (timeDeltaSec >= 0.15 || this.bytesReceived >= this.metadata.size) {
+      const speed = this.bytesSinceLastProgress / (timeDeltaSec || 0.001);
+      const remainingBytes = Math.max(0, this.metadata.size - this.bytesReceived);
       const remainingSeconds = speed > 0 ? remainingBytes / speed : 0;
       const percentage = Math.min(100, Math.round((this.bytesReceived / this.metadata.size) * 100));
 
@@ -274,6 +320,24 @@ export class FileReceiver {
         totalChunks: this.metadata.totalChunks,
       });
 
+      // Synchronize progress back to sender via DataChannel
+      if (
+        this.dataChannel &&
+        this.dataChannel.readyState === 'open' &&
+        (now - this.lastReportTime >= 150 || this.bytesReceived >= this.metadata.size)
+      ) {
+        try {
+          this.dataChannel.send(
+            JSON.stringify({
+              type: 'transfer_progress',
+              bytesReceived: this.bytesReceived,
+              percentage,
+            })
+          );
+          this.lastReportTime = now;
+        } catch {}
+      }
+
       this.lastProgressTime = now;
       this.bytesSinceLastProgress = 0;
     }
@@ -283,9 +347,13 @@ export class FileReceiver {
     if (!this.metadata) return;
 
     const computedHash = this.hasher ? this.hasher.digest('hex') : undefined;
-    const isVerified = Boolean(senderHash && computedHash && senderHash.toLowerCase() === computedHash.toLowerCase());
+    const isVerified = Boolean(
+      senderHash && computedHash && senderHash.toLowerCase() === computedHash.toLowerCase()
+    );
 
-    console.info(`[FileReceiver] Transfer complete. Hash verified: ${isVerified}. Sender Hash: ${senderHash}, Computed: ${computedHash}`);
+    console.info(
+      `[FileReceiver] Transfer complete. Hash verified: ${isVerified}. Sender Hash: ${senderHash}, Computed: ${computedHash}`
+    );
 
     const blob = new Blob(this.receivedChunks, {
       type: this.metadata.type || 'application/octet-stream',
@@ -293,12 +361,17 @@ export class FileReceiver {
 
     const downloadUrl = URL.createObjectURL(blob);
 
-    const link = document.createElement('a');
-    link.href = downloadUrl;
-    link.download = this.metadata.name;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    // Auto-trigger browser download
+    try {
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.download = this.metadata.name;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (err) {
+      console.warn('[FileReceiver] Auto-download failed, fallback button is available:', err);
+    }
 
     // Send ACK back to sender over DataChannel if open
     if (this.dataChannel && this.dataChannel.readyState === 'open') {
@@ -322,5 +395,6 @@ export class FileReceiver {
   private cleanup(): void {
     this.receivedChunks = [];
     this.hasher = null;
+    this.messageQueue = [];
   }
 }

@@ -86,11 +86,11 @@ def test_signaling_relay_flow():
             term_msg = sender_ws.receive_json()
             assert term_msg["type"] == "transfer-complete"
 
-    # 8. Verify room has been destroyed and cannot be reused
+    # 8. Verify room has been completely purged from memory (no storage) and can be reused
     status_resp = client.get("/api/rooms/webrtctest/status")
-    assert status_resp.status_code == 200
-    assert status_resp.json()["status"] == SessionState.DESTROYED
+    assert status_resp.status_code == 404
 
     recreate_resp = client.post("/api/rooms", json={"room_id": "webrtctest"})
-    assert recreate_resp.status_code == 409
-    assert "has already completed and been destroyed" in recreate_resp.json()["detail"]
+    assert recreate_resp.status_code == 201
+    assert recreate_resp.json()["room_id"] == "webrtctest"
+

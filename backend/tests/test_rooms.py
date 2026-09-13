@@ -120,3 +120,26 @@ async def test_successful_otp_verification_and_invalidation():
         reused_data = reused_resp.json()
         assert reused_data["success"] is False
         assert "already authenticated" in reused_data["message"]
+
+
+@pytest.mark.asyncio
+async def test_room_reuse_after_destroy():
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        # Create room
+        resp1 = await client.post("/api/rooms", json={"room_id": "reusableroom"})
+        assert resp1.status_code == 201
+        sender_token = resp1.json()["sender_token"]
+
+        # Destroy room
+        destroy_resp = await client.post(
+            "/api/rooms/reusableroom/destroy",
+            params={"token": sender_token},
+        )
+        assert destroy_resp.status_code == 200
+
+        # Now recreate the same room ID - it should succeed cleanly without "already destroyed" error
+        resp2 = await client.post("/api/rooms", json={"room_id": "reusableroom"})
+        assert resp2.status_code == 201
+        assert resp2.json()["room_id"] == "reusableroom"
+
