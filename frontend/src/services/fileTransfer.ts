@@ -27,6 +27,25 @@ export class FileSender {
     this.callbacks = callbacks;
     this.chunkSize = chunkSize;
     this.dataChannel.bufferedAmountLowThreshold = LOW_WATER_MARK;
+    this.setupListeners();
+  }
+
+  private setupListeners(): void {
+    const prevOnMessage = this.dataChannel.onmessage;
+    this.dataChannel.onmessage = (event: MessageEvent) => {
+      if (typeof event.data === 'string') {
+        try {
+          const message = JSON.parse(event.data);
+          if (message.type === 'transfer_ack') {
+            console.info('[FileSender] Received transfer_ack from receiver:', message);
+            this.callbacks.onComplete(undefined, message.verified, message.hash);
+          }
+        } catch {}
+      }
+      if (prevOnMessage) {
+        prevOnMessage.call(this.dataChannel, event);
+      }
+    };
   }
 
   public cancel(): void {
@@ -280,6 +299,21 @@ export class FileReceiver {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+
+    // Send ACK back to sender over DataChannel if open
+    if (this.dataChannel && this.dataChannel.readyState === 'open') {
+      try {
+        this.dataChannel.send(
+          JSON.stringify({
+            type: 'transfer_ack',
+            verified: isVerified,
+            hash: computedHash,
+          })
+        );
+      } catch (err) {
+        console.warn('[FileReceiver] Could not send transfer_ack over dataChannel:', err);
+      }
+    }
 
     this.callbacks.onComplete(downloadUrl, isVerified, computedHash);
     this.cleanup();

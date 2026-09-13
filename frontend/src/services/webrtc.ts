@@ -132,13 +132,22 @@ export class WebRTCManager {
   public close(): void {
     if (this.dataChannel) {
       try {
-        this.dataChannel.close();
+        this.dataChannel.onopen = null;
+        this.dataChannel.onclose = null;
+        this.dataChannel.onerror = null;
+        this.dataChannel.onmessage = null;
+        if (this.dataChannel.readyState === 'open' || this.dataChannel.readyState === 'connecting') {
+          this.dataChannel.close();
+        }
       } catch {}
       this.dataChannel = null;
     }
 
     if (this.pc) {
       try {
+        this.pc.onicecandidate = null;
+        this.pc.onconnectionstatechange = null;
+        this.pc.ondatachannel = null;
         this.pc.close();
       } catch {}
       this.pc = null;

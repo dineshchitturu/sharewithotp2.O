@@ -30,6 +30,7 @@ export const Send: React.FC<SendProps> = ({ onBack }) => {
   const signalingRef = useRef<SignalingClient | null>(null);
   const webrtcRef = useRef<WebRTCManager | null>(null);
   const fileSenderRef = useRef<FileSender | null>(null);
+  const isCompletedRef = useRef<boolean>(false);
 
   useEffect(() => {
     return () => {
@@ -55,6 +56,7 @@ export const Send: React.FC<SendProps> = ({ onBack }) => {
   const handleCreateRoom = async (chosenRoomId: string) => {
     setIsLoading(true);
     setErrorMessage(null);
+    isCompletedRef.current = false;
 
     try {
       const resp = await createRoom(chosenRoomId);
@@ -75,8 +77,10 @@ export const Send: React.FC<SendProps> = ({ onBack }) => {
           if (state === 'connected') {
             setTransferState('CONNECTED');
           } else if (state === 'disconnected' || state === 'failed') {
-            setTransferState('DISCONNECTED');
-            setErrorMessage('Peer connection disconnected.');
+            if (!isCompletedRef.current) {
+              setTransferState('DISCONNECTED');
+              setErrorMessage('Peer connection disconnected.');
+            }
           }
         }
       );
@@ -95,7 +99,14 @@ export const Send: React.FC<SendProps> = ({ onBack }) => {
         };
 
         dataChannel.onerror = (err) => {
-          console.error('[Sender] DataChannel error:', err);
+          console.warn('[Sender] DataChannel error event:', err);
+          if (
+            isCompletedRef.current ||
+            dataChannel.readyState === 'closing' ||
+            dataChannel.readyState === 'closed'
+          ) {
+            return;
+          }
           setErrorMessage('DataChannel encountered an error.');
         };
       }
@@ -123,18 +134,26 @@ export const Send: React.FC<SendProps> = ({ onBack }) => {
             await webrtc.addIceCandidate(msg.payload);
           }
         } else if (msg.type === 'transfer-complete') {
+          isCompletedRef.current = true;
+          setErrorMessage(null);
           setTransferState('COMPLETED');
           setStep('completed');
           cleanupTransfer();
         } else if (msg.type === 'transfer-cancelled') {
-          setTransferState('CANCELLED');
-          setErrorMessage(`Transfer cancelled: ${msg.reason || 'By receiver'}`);
-          cleanupTransfer();
+          if (!isCompletedRef.current) {
+            setTransferState('CANCELLED');
+            setErrorMessage(`Transfer cancelled: ${msg.reason || 'By receiver'}`);
+            cleanupTransfer();
+          }
         } else if (msg.type === 'peer-left') {
-          setTransferState('DISCONNECTED');
-          setErrorMessage('Receiver disconnected from the room.');
+          if (!isCompletedRef.current) {
+            setTransferState('DISCONNECTED');
+            setErrorMessage('Receiver disconnected from the room.');
+          }
         } else if (msg.type === 'error') {
-          setErrorMessage(msg.message || 'Signaling error occurred.');
+          if (!isCompletedRef.current) {
+            setErrorMessage(msg.message || 'Signaling error occurred.');
+          }
         }
       });
 
@@ -154,21 +173,33 @@ export const Send: React.FC<SendProps> = ({ onBack }) => {
       onProgress: (prog) => {
         setProgress(prog);
       },
-      onComplete: (_url, _verified, hash) => {
+      onComplete: (_url, verified, hash) => {
         setComputedHash(hash || '');
-        setTransferState('VERIFYING');
+        if (verified) {
+          isCompletedRef.current = true;
+          setErrorMessage(null);
+          setTransferState('COMPLETED');
+          setStep('completed');
+          cleanupTransfer();
+        } else {
+          setTransferState('VERIFYING');
+        }
       },
       onError: (err) => {
-        setErrorMessage(err);
-        setTransferState('FAILED');
+        if (!isCompletedRef.current) {
+          setErrorMessage(err);
+          setTransferState('FAILED');
+        }
       },
     });
 
     fileSenderRef.current = sender;
     sender.sendFile(file).catch((err) => {
-      console.error('[Sender] Streaming error:', err);
-      setErrorMessage(err.message || 'File transfer failed.');
-      setTransferState('FAILED');
+      if (!isCompletedRef.current) {
+        console.error('[Sender] Streaming error:', err);
+        setErrorMessage(err.message || 'File transfer failed.');
+        setTransferState('FAILED');
+      }
     });
   };
 
@@ -190,6 +221,7 @@ export const Send: React.FC<SendProps> = ({ onBack }) => {
 
   const handleReset = () => {
     cleanupTransfer();
+    isCompletedRef.current = false;
     setSelectedFile(null);
     setRoomId('');
     setOtp('');
@@ -215,7 +247,9 @@ export const Send: React.FC<SendProps> = ({ onBack }) => {
         )}
       </div>
 
-      <ErrorMessage message={errorMessage || ''} onDismiss={() => setErrorMessage(null)} />
+      {step !== 'completed' && (
+        <ErrorMessage message={errorMessage || ''} onDismiss={() => setErrorMessage(null)} />
+      )}
 
       {step === 'create' && (
         <div className="space-y-6">

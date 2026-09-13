@@ -29,6 +29,7 @@ export const Receive: React.FC<ReceiveProps> = ({ onBack }) => {
   const signalingRef = useRef<SignalingClient | null>(null);
   const webrtcRef = useRef<WebRTCManager | null>(null);
   const fileReceiverRef = useRef<FileReceiver | null>(null);
+  const isCompletedRef = useRef<boolean>(false);
 
   useEffect(() => {
     return () => {
@@ -54,6 +55,7 @@ export const Receive: React.FC<ReceiveProps> = ({ onBack }) => {
   const handleJoin = async (enteredRoomId: string, enteredOtp: string) => {
     setIsLoading(true);
     setErrorMessage(null);
+    isCompletedRef.current = false;
 
     try {
       const verifyResp = await verifyOTP(enteredRoomId, enteredOtp);
@@ -80,14 +82,28 @@ export const Receive: React.FC<ReceiveProps> = ({ onBack }) => {
           if (state === 'connected') {
             setTransferState('CONNECTED');
           } else if (state === 'disconnected' || state === 'failed') {
-            setTransferState('DISCONNECTED');
-            setErrorMessage('Peer connection disconnected.');
+            if (!isCompletedRef.current) {
+              setTransferState('DISCONNECTED');
+              setErrorMessage('Peer connection disconnected.');
+            }
           }
         },
         (dataChannel) => {
           console.info('[Receiver] DataChannel established from sender!');
           setStep('transferring');
           setTransferState('TRANSFERRING');
+
+          dataChannel.onerror = (err) => {
+            console.warn('[Receiver] DataChannel error event:', err);
+            if (
+              isCompletedRef.current ||
+              dataChannel.readyState === 'closing' ||
+              dataChannel.readyState === 'closed'
+            ) {
+              return;
+            }
+            setErrorMessage('DataChannel encountered an error.');
+          };
 
           const receiver = new FileReceiver(dataChannel, {
             onProgress: (prog) => {
@@ -97,6 +113,8 @@ export const Receive: React.FC<ReceiveProps> = ({ onBack }) => {
               }
             },
             onComplete: (_url, hashVerified, hash) => {
+              isCompletedRef.current = true;
+              setErrorMessage(null);
               setIsHashVerified(Boolean(hashVerified));
               setComputedHash(hash || '');
               setTransferState('COMPLETED');
@@ -105,11 +123,15 @@ export const Receive: React.FC<ReceiveProps> = ({ onBack }) => {
               if (signalingRef.current) {
                 signalingRef.current.sendComplete();
               }
-              cleanupTransfer();
+              setTimeout(() => {
+                cleanupTransfer();
+              }, 500);
             },
             onError: (err) => {
-              setErrorMessage(err);
-              setTransferState('FAILED');
+              if (!isCompletedRef.current) {
+                setErrorMessage(err);
+                setTransferState('FAILED');
+              }
             },
           });
 
@@ -135,18 +157,26 @@ export const Receive: React.FC<ReceiveProps> = ({ onBack }) => {
             await webrtc.addIceCandidate(msg.payload);
           }
         } else if (msg.type === 'transfer-complete') {
+          isCompletedRef.current = true;
+          setErrorMessage(null);
           setTransferState('COMPLETED');
           setStep('completed');
           cleanupTransfer();
         } else if (msg.type === 'transfer-cancelled') {
-          setTransferState('CANCELLED');
-          setErrorMessage(`Transfer cancelled by peer: ${msg.reason || ''}`);
-          cleanupTransfer();
+          if (!isCompletedRef.current) {
+            setTransferState('CANCELLED');
+            setErrorMessage(`Transfer cancelled by peer: ${msg.reason || ''}`);
+            cleanupTransfer();
+          }
         } else if (msg.type === 'peer-left') {
-          setTransferState('DISCONNECTED');
-          setErrorMessage('Sender disconnected.');
+          if (!isCompletedRef.current) {
+            setTransferState('DISCONNECTED');
+            setErrorMessage('Sender disconnected.');
+          }
         } else if (msg.type === 'error') {
-          setErrorMessage(msg.message || 'Signaling error occurred.');
+          if (!isCompletedRef.current) {
+            setErrorMessage(msg.message || 'Signaling error occurred.');
+          }
         }
       });
 
@@ -169,6 +199,7 @@ export const Receive: React.FC<ReceiveProps> = ({ onBack }) => {
 
   const handleReset = () => {
     cleanupTransfer();
+    isCompletedRef.current = false;
     setRoomId('');
     setFileName('Receiving File...');
     setFileSize(0);
@@ -195,7 +226,9 @@ export const Receive: React.FC<ReceiveProps> = ({ onBack }) => {
         )}
       </div>
 
-      <ErrorMessage message={errorMessage || ''} onDismiss={() => setErrorMessage(null)} />
+      {step !== 'completed' && (
+        <ErrorMessage message={errorMessage || ''} onDismiss={() => setErrorMessage(null)} />
+      )}
 
       {step === 'join' && (
         <RoomJoiner
