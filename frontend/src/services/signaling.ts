@@ -1,6 +1,6 @@
 import type { SignalingMessage } from '../types/signaling';
 import type { TransferState } from '../types/transfer';
-import { getApiBase } from './api';
+import { API_BASE } from './api';
 
 export type SignalingEventHandler = (message: SignalingMessage) => void;
 
@@ -27,15 +27,15 @@ export class SignalingClient {
     return new Promise((resolve, reject) => {
       this.isIntentionallyClosed = false;
 
-      const explicitWsBase = import.meta.env.VITE_WS_URL;
-      const apiBase = getApiBase();
       let url: string;
+      const explicitWsBase = import.meta.env.VITE_WS_URL;
 
       if (explicitWsBase) {
         const cleanWs = explicitWsBase.replace(/\/+$/, '');
         url = `${cleanWs}/ws/signaling/${encodeURIComponent(this.roomId)}?role=${this.role}&token=${encodeURIComponent(this.token)}`;
-      } else if (apiBase) {
-        const wsFromApi = apiBase.replace(/^http/, 'ws');
+      } else if (API_BASE.startsWith('http')) {
+        // Derive wss:// automatically from https://sharewithotp2-o.onrender.com
+        const wsFromApi = API_BASE.replace(/^http/, 'ws');
         url = `${wsFromApi}/ws/signaling/${encodeURIComponent(this.roomId)}?role=${this.role}&token=${encodeURIComponent(this.token)}`;
       } else {
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -61,18 +61,9 @@ export class SignalingClient {
       this.ws.onclose = (event) => {
         this.stopHeartbeat();
         if (!this.isIntentionallyClosed) {
-          let errorMsg = event.reason || `WebSocket closed (code: ${event.code})`;
-          if (event.code === 1006) {
-            const currentBase = getApiBase();
-            if (!currentBase && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
-              errorMsg = `WebSocket closed (code: 1006). Your frontend is connecting to '${window.location.host}' (which does not support WebSockets). Click 'Server' in the top bar to connect your deployed FastAPI backend URL (e.g. https://your-backend.onrender.com).`;
-            } else {
-              errorMsg = `WebSocket signaling connection failed (code: 1006). Please verify that your backend server is awake and supports WebSockets.`;
-            }
-          }
           this.emit({
             type: 'error',
-            message: errorMsg,
+            message: event.reason || `WebSocket closed (code: ${event.code})`,
           });
         }
       };
