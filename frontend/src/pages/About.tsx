@@ -62,7 +62,7 @@ export const About: React.FC<AboutProps> = ({ onBack, onNavigate }) => {
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-2">
               <div>
                 <h2 className="text-2xl font-bold text-white tracking-tight">Dinesh Chitturu</h2>
-                <p className="text-sm font-medium text-sky-400">Full-Stack & Systems Engineer</p>
+                {/* <p className="text-sm font-medium text-sky-400">Full-Stack & Systems Engineer</p> */}
               </div>
 
               <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-950/60 border border-slate-800 text-[11px] text-emerald-400 font-mono self-center sm:self-auto">
