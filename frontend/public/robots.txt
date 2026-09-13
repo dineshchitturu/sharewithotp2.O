@@ -1,0 +1,9 @@
+﻿# robots.txt for ShareWithOTP2.O
+User-agent: *
+Allow: /
+Allow: /how-it-works
+Allow: /about
+Allow: /privacy
+Allow: /terms
+
+Sitemap: https://sharewithotp2-o-1.onrender.com/sitemap.xml

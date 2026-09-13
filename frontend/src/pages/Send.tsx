@@ -57,6 +57,11 @@ export const Send: React.FC<SendProps> = ({ onBack }) => {
   };
 
   const handleCreateRoom = async (chosenRoomId: string) => {
+    if (!selectedFileRef.current) {
+      setErrorMessage('Please select a file to share first before creating a transfer room.');
+      return;
+    }
+
     setIsLoading(true);
     setErrorMessage(null);
     isCompletedRef.current = false;
@@ -267,9 +272,16 @@ export const Send: React.FC<SendProps> = ({ onBack }) => {
           <FileSelector
             onFileSelect={handleFileSelected}
             selectedFile={selectedFile}
-            onClearFile={() => setSelectedFile(null)}
+            onClearFile={() => {
+              selectedFileRef.current = null;
+              setSelectedFile(null);
+            }}
           />
-          <RoomCreator onCreate={handleCreateRoom} isLoading={isLoading} />
+          <RoomCreator
+            onCreate={handleCreateRoom}
+            isLoading={isLoading}
+            hasSelectedFile={Boolean(selectedFile)}
+          />
         </div>
       )}
 

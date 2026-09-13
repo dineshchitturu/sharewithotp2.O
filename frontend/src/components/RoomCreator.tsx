@@ -4,9 +4,10 @@ import { ArrowRight, ShieldCheck, Sparkles } from 'lucide-react';
 interface RoomCreatorProps {
   onCreate: (roomId: string) => Promise<void>;
   isLoading: boolean;
+  hasSelectedFile?: boolean;
 }
 
-export const RoomCreator: React.FC<RoomCreatorProps> = ({ onCreate, isLoading }) => {
+export const RoomCreator: React.FC<RoomCreatorProps> = ({ onCreate, isLoading, hasSelectedFile = true }) => {
   const [roomId, setRoomId] = useState('');
   const [validationError, setValidationError] = useState<string | null>(null);
 
@@ -23,6 +24,11 @@ export const RoomCreator: React.FC<RoomCreatorProps> = ({ onCreate, isLoading })
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const clean = roomId.trim().toLowerCase();
+
+    if (!hasSelectedFile) {
+      setValidationError('Please select a file to share first before creating a room.');
+      return;
+    }
 
     if (!clean) {
       setValidationError('Please enter a temporary Room ID.');
@@ -90,9 +96,15 @@ export const RoomCreator: React.FC<RoomCreatorProps> = ({ onCreate, isLoading })
           </p>
         </div>
 
+        {!hasSelectedFile && (
+          <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-xs text-amber-300 text-center">
+            ⚠ Please choose a file above first to create a transfer room.
+          </div>
+        )}
+
         <button
           type="submit"
-          disabled={isLoading || !roomId.trim()}
+          disabled={isLoading || !roomId.trim() || !hasSelectedFile}
           className="w-full mt-4 flex items-center justify-center gap-2 py-3.5 px-6 rounded-xl font-medium text-white bg-sky-600 hover:bg-sky-500 active:bg-sky-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg shadow-sky-600/20"
         >
           {isLoading ? (

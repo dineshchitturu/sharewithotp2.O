@@ -54,6 +54,11 @@ export const TransferProgress: React.FC<TransferProgressProps> = ({
       <div className="flex items-end justify-between mb-3">
         <div>
           <span className="text-3xl font-mono font-extrabold text-white">{percentage}%</span>
+          {role === 'receiver' && transferred === 0 && (
+            <p className="text-[11px] text-sky-400 font-medium animate-pulse mt-0.5">
+              Waiting for sender to stream file data...
+            </p>
+          )}
         </div>
         <div className="text-right font-mono text-xs text-slate-400">
           <span className="text-slate-200 font-semibold">{formatBytes(transferred)}</span>
