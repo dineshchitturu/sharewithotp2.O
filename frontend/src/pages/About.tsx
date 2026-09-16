@@ -67,7 +67,7 @@ export const About: React.FC<AboutProps> = ({ onBack, onNavigate }) => {
 
               <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-950/60 border border-slate-800 text-[11px] text-emerald-400 font-mono self-center sm:self-auto">
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-                <span>Available for collaborations</span>
+                {/* <span>Available for collaborations</span> */}
               </div>
             </div>
 
