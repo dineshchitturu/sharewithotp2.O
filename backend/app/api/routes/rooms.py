@@ -1,3 +1,4 @@
+from typing import Optional
 from fastapi import APIRouter, HTTPException, Request, status
 from app.models.session import SessionState
 from app.schemas.room import (
@@ -14,14 +15,15 @@ router = APIRouter(prefix="/api/rooms", tags=["Rooms"])
 
 
 @router.post("", response_model=CreateRoomResponse, status_code=status.HTTP_201_CREATED)
-async def create_room(req: CreateRoomRequest):
+async def create_room(req: Optional[CreateRoomRequest] = None):
     """Create a new temporary transfer room.
     
     Generates a cryptographically secure 6-digit OTP, stores only the salted hash,
     and returns the room metadata along with the one-time OTP for the sender.
     """
+    room_id = req.room_id if req else None
     try:
-        session, plaintext_otp = await room_manager.create_room(req.room_id)
+        session, plaintext_otp = await room_manager.create_room(room_id)
         return CreateRoomResponse(
             room_id=session.room_id,
             otp=plaintext_otp,

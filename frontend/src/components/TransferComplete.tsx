@@ -61,7 +61,7 @@ export const TransferComplete: React.FC<TransferCompleteProps> = ({
       </div>
 
       <div className="bg-slate-950/50 border border-slate-800/60 rounded-xl p-3 mb-6 text-xs text-slate-400 leading-relaxed">
-        The temporary transfer session and room ID have been permanently destroyed. No files were stored on the server.
+        The temporary transfer session and one-time code have been permanently destroyed. No files were stored on the server.
       </div>
 
       {downloadUrl && (

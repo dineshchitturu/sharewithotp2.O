@@ -10,12 +10,16 @@ OTP_REGEX = re.compile(r"^\d{6}$")
 
 
 class CreateRoomRequest(BaseModel):
-    room_id: str = Field(..., description="Temporary room identifier (4-30 alphanumeric characters, underscores or hyphens)")
+    room_id: Optional[str] = Field(None, description="Optional temporary room identifier; if omitted, an OTP-based code is automatically generated")
 
     @field_validator("room_id")
     @classmethod
-    def validate_room_id(cls, v: str) -> str:
+    def validate_room_id(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return None
         clean = v.strip().lower()
+        if not clean:
+            return None
         if not ROOM_ID_REGEX.match(clean):
             raise ValueError(
                 "Room ID must be between 4 and 30 characters and contain only letters, numbers, hyphens, and underscores."

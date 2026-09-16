@@ -1,5 +1,4 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { RoomCreator } from '../components/RoomCreator';
 import { OTPDisplay } from '../components/OTPDisplay';
 import { FileSelector } from '../components/FileSelector';
 import { TransferProgress } from '../components/TransferProgress';
@@ -9,6 +8,7 @@ import { createRoom } from '../services/api';
 import { SignalingClient } from '../services/signaling';
 import { WebRTCManager } from '../services/webrtc';
 import { FileSender } from '../services/fileTransfer';
+import { Sparkles } from 'lucide-react';
 import type { TransferProgress as ProgressData, TransferState } from '../types/transfer';
 
 interface SendProps {
@@ -18,7 +18,6 @@ interface SendProps {
 export const Send: React.FC<SendProps> = ({ onBack }) => {
   const [step, setStep] = useState<'create' | 'waiting' | 'transferring' | 'completed'>('create');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [roomId, setRoomId] = useState<string>('');
   const [otp, setOtp] = useState<string>('');
   const [expiresAt, setExpiresAt] = useState<string>('');
   const [transferState, setTransferState] = useState<TransferState>('CREATED');
@@ -56,9 +55,9 @@ export const Send: React.FC<SendProps> = ({ onBack }) => {
     }
   };
 
-  const handleCreateRoom = async (chosenRoomId: string) => {
+  const handleCreateTransfer = async () => {
     if (!selectedFileRef.current) {
-      setErrorMessage('Please select a file to share first before creating a transfer room.');
+      setErrorMessage('Please select a file to share first before creating a transfer.');
       return;
     }
 
@@ -68,8 +67,7 @@ export const Send: React.FC<SendProps> = ({ onBack }) => {
     isStreamingRef.current = false;
 
     try {
-      const resp = await createRoom(chosenRoomId);
-      setRoomId(resp.room_id);
+      const resp = await createRoom();
       setOtp(resp.otp);
       setExpiresAt(resp.expires_at);
       setTransferState('WAITING_FOR_RECEIVER');
@@ -192,7 +190,7 @@ export const Send: React.FC<SendProps> = ({ onBack }) => {
           setErrorMessage(null);
           setTransferState('COMPLETED');
           setStep('completed');
-          cleanupTransfer();
+          // Gracefully maintain connection on success screen so receiver download can finalize
         } else {
           setTransferState('VERIFYING');
         }
@@ -239,7 +237,6 @@ export const Send: React.FC<SendProps> = ({ onBack }) => {
     isStreamingRef.current = false;
     selectedFileRef.current = null;
     setSelectedFile(null);
-    setRoomId('');
     setOtp('');
     setTransferState('CREATED');
     setProgress(null);
@@ -256,9 +253,10 @@ export const Send: React.FC<SendProps> = ({ onBack }) => {
         >
           ← Back to Home
         </button>
-        {step !== 'create' && (
-          <span className="text-xs font-mono text-slate-500">
-            Room: <strong className="text-slate-300">{roomId}</strong>
+        {step !== 'create' && otp && (
+          <span className="text-xs font-mono text-slate-400 bg-slate-900/90 px-3 py-1 rounded-full border border-slate-800 flex items-center gap-1.5">
+            <span>Code:</span>
+            <strong className="text-sky-300 font-bold">{otp.length === 6 ? `${otp.slice(0, 3)} ${otp.slice(3)}` : otp}</strong>
           </span>
         )}
       </div>
@@ -277,18 +275,32 @@ export const Send: React.FC<SendProps> = ({ onBack }) => {
               setSelectedFile(null);
             }}
           />
-          <RoomCreator
-            onCreate={handleCreateRoom}
-            isLoading={isLoading}
-            hasSelectedFile={Boolean(selectedFile)}
-          />
+
+          <div className="pt-2">
+            <button
+              onClick={handleCreateTransfer}
+              disabled={isLoading || !selectedFile}
+              className="w-full flex items-center justify-center gap-2.5 py-4 px-6 rounded-2xl font-semibold text-white bg-sky-600 hover:bg-sky-500 active:bg-sky-700 disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-xl shadow-sky-600/25 text-base"
+            >
+              {isLoading ? (
+                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              ) : (
+                <>
+                  <Sparkles className="w-5 h-5 text-sky-200" />
+                  <span>Generate One-Time Code & Share</span>
+                </>
+              )}
+            </button>
+            <p className="text-center text-xs text-slate-500 mt-2.5">
+              Direct peer-to-peer WebRTC transfer • Zero server storage
+            </p>
+          </div>
         </div>
       )}
 
       {step === 'waiting' && (
         <div className="space-y-6">
           <OTPDisplay
-            roomId={roomId}
             otp={otp}
             expiresAt={expiresAt}
             state={transferState}

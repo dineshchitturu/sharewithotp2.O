@@ -32,35 +32,53 @@ class RoomManager:
         self._connections: Dict[str, Dict[str, WebSocket]] = {}
         self._lock = asyncio.Lock()
 
-    async def create_room(self, room_id: str) -> Tuple[RoomSession, str]:
+    async def create_room(self, room_id: Optional[str] = None) -> Tuple[RoomSession, str]:
         """Create a new temporary room with cryptographically generated OTP.
+        If room_id is omitted, an OTP-based code is automatically generated.
         
         Returns:
             Tuple of (RoomSession, plaintext_otp_for_sender)
         """
         settings = get_settings()
-        clean_room_id = room_id.strip().lower()
 
         async with self._lock:
-            existing = self._rooms.get(clean_room_id)
-            if existing:
-                if (
-                    existing.is_destroyed
-                    or existing.is_expired()
-                    or existing.state in (
+            if room_id and room_id.strip():
+                clean_room_id = room_id.strip().lower()
+                existing = self._rooms.get(clean_room_id)
+                if existing:
+                    if (
+                        existing.is_destroyed
+                        or existing.is_expired()
+                        or existing.state in (
+                            SessionState.COMPLETED,
+                            SessionState.CANCELLED,
+                            SessionState.FAILED,
+                            SessionState.DESTROYED,
+                            SessionState.EXPIRED,
+                        )
+                    ):
+                        # Clean up previous session and allow fresh reuse of the Room ID
+                        await self._purge_room_internal(clean_room_id, reason="reused")
+                    else:
+                        raise ValueError(f"Room ID '{clean_room_id}' is currently active. Please choose a different Room ID.")
+                plaintext_otp = generate_secure_otp()
+            else:
+                # Generate unique 6-digit OTP as the room ID
+                while True:
+                    candidate = generate_secure_otp()
+                    existing = self._rooms.get(candidate)
+                    if not existing or existing.is_destroyed or existing.is_expired() or existing.state in (
                         SessionState.COMPLETED,
                         SessionState.CANCELLED,
                         SessionState.FAILED,
                         SessionState.DESTROYED,
                         SessionState.EXPIRED,
-                    )
-                ):
-                    # Clean up previous session and allow fresh reuse of the Room ID
-                    await self._purge_room_internal(clean_room_id, reason="reused")
-                else:
-                    raise ValueError(f"Room ID '{clean_room_id}' is currently active. Please choose a different Room ID.")
-
-            plaintext_otp = generate_secure_otp()
+                    ):
+                        if existing:
+                            await self._purge_room_internal(candidate, reason="reused")
+                        clean_room_id = candidate
+                        plaintext_otp = candidate
+                        break
             salt = generate_salt()
             hashed_otp = hash_otp(plaintext_otp, salt)
 

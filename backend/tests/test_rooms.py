@@ -143,3 +143,28 @@ async def test_room_reuse_after_destroy():
         assert resp2.status_code == 201
         assert resp2.json()["room_id"] == "reusableroom"
 
+
+@pytest.mark.asyncio
+async def test_create_room_auto_otp():
+    """Verify that creating a room with no room_id auto-generates a 6-digit OTP as room_id."""
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        # Request with empty body
+        resp = await client.post("/api/rooms", json={})
+        assert resp.status_code == 201
+        data = resp.json()
+        assert len(data["room_id"]) == 6
+        assert data["room_id"].isdigit()
+        assert data["room_id"] == data["otp"]
+        assert "sender_token" in data
+        assert data["status"] == SessionState.WAITING_FOR_RECEIVER
+
+        # Verify with the auto-generated code
+        verify_resp = await client.post(
+            f"/api/rooms/{data['room_id']}/verify",
+            json={"otp": data["otp"]},
+        )
+        assert verify_resp.status_code == 200
+        assert verify_resp.json()["success"] is True
+
+

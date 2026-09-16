@@ -1,4 +1,4 @@
-﻿import React from 'react';
+import React from 'react';
 import { ArrowLeft, KeyRound, Radio, Network, Download, CheckCircle2, ShieldCheck, XCircle } from 'lucide-react';
 
 interface HowItWorksProps {
@@ -11,14 +11,14 @@ export const HowItWorks: React.FC<HowItWorksProps> = ({ onBack, onNavigate }) =>
     {
       step: '01',
       icon: <KeyRound className="w-6 h-6 text-sky-400" />,
-      title: 'Sender Chooses Room ID & Gets OTP',
-      desc: 'The sender selects their file (> 100 MB supported) and defines a temporary Room ID. The backend generates a random 6-digit one-time password (OTP) stored only as a salted SHA-256 hash in volatile memory.',
+      title: 'Sender Generates Ephemeral 6-Digit OTP',
+      desc: 'The sender selects their file (> 100 MB supported) and clicks Generate Code. The backend generates a random 6-digit one-time password (OTP) stored only as a salted SHA-256 hash in volatile memory.',
     },
     {
       step: '02',
       icon: <Radio className="w-6 h-6 text-indigo-400" />,
-      title: 'Receiver Authenticates',
-      desc: 'The receiver visits ShareWithOTP2.O on their browser, enters the Room ID and 6-digit OTP. The backend validates the salted hash with brute-force rate-limiting and issues a single-use session token.',
+      title: 'Receiver Authenticates with OTP',
+      desc: 'The receiver visits ShareWithOTP2.O on their browser, enters the 6-digit OTP (or opens the direct link). The backend validates the salted hash with brute-force rate-limiting and issues a single-use session token.',
     },
     {
       step: '03',

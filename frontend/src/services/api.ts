@@ -38,29 +38,30 @@ export interface RoomStatusResponse {
   created_at: string;
 }
 
-export async function createRoom(roomId: string): Promise<CreateRoomResponse> {
+export async function createRoom(roomId?: string): Promise<CreateRoomResponse> {
   const url = `${API_BASE}/api/rooms`;
   const response = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ room_id: roomId }),
+    body: JSON.stringify(roomId ? { room_id: roomId } : {}),
   });
 
   const data = await response.json();
   if (!response.ok) {
-    throw new Error(data.detail || 'Failed to create temporary room.');
+    throw new Error(data.detail || 'Failed to create temporary transfer.');
   }
 
   return data;
 }
 
-export async function verifyOTP(roomId: string, otp: string): Promise<VerifyOTPResponse> {
-  const cleanRoomId = roomId.trim().toLowerCase();
+export async function verifyOTP(codeOrRoomId: string, otp?: string): Promise<VerifyOTPResponse> {
+  const actualOtp = (otp || codeOrRoomId).trim();
+  const cleanRoomId = (codeOrRoomId || otp || '').trim().toLowerCase();
   const url = `${API_BASE}/api/rooms/${cleanRoomId}/verify`;
   const response = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ otp: otp.trim() }),
+    body: JSON.stringify({ otp: actualOtp }),
   });
 
   const data = await response.json();

@@ -4,16 +4,15 @@ import { ConnectionStatus } from './ConnectionStatus';
 import type { TransferState } from '../types/transfer';
 
 interface OTPDisplayProps {
-  roomId: string;
   otp: string;
   expiresAt: string;
   state: TransferState;
+  roomId?: string;
 }
 
-export const OTPDisplay: React.FC<OTPDisplayProps> = ({ roomId, otp, expiresAt, state }) => {
-  const [copiedRoom, setCopiedRoom] = useState(false);
+export const OTPDisplay: React.FC<OTPDisplayProps> = ({ otp, expiresAt, state }) => {
   const [copiedOtp, setCopiedOtp] = useState(false);
-  const [copiedAll, setCopiedAll] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
   const [timeLeft, setTimeLeft] = useState<string>('');
 
   useEffect(() => {
@@ -33,32 +32,32 @@ export const OTPDisplay: React.FC<OTPDisplayProps> = ({ roomId, otp, expiresAt, 
     return () => clearInterval(interval);
   }, [expiresAt]);
 
-  const copyToClipboard = async (text: string, type: 'room' | 'otp' | 'all') => {
+  const copyToClipboard = async (text: string, type: 'otp' | 'link') => {
     try {
       await navigator.clipboard.writeText(text);
-      if (type === 'room') {
-        setCopiedRoom(true);
-        setTimeout(() => setCopiedRoom(false), 2000);
-      } else if (type === 'otp') {
+      if (type === 'otp') {
         setCopiedOtp(true);
         setTimeout(() => setCopiedOtp(false), 2000);
       } else {
-        setCopiedAll(true);
-        setTimeout(() => setCopiedAll(false), 2000);
+        setCopiedLink(true);
+        setTimeout(() => setCopiedLink(false), 2000);
       }
     } catch (err) {
       console.error('Failed to copy to clipboard', err);
     }
   };
 
-  const shareText = `Secure P2P Transfer\nRoom ID: ${roomId}\nOTP: ${otp}\nConnect at: ${window.location.origin}/receive`;
+  const shareUrl = `${window.location.origin}/?otp=${otp}`;
+
+  // Format 6-digit OTP with a space in middle for easy readability: e.g. 123 456
+  const formattedOtp = otp.length === 6 ? `${otp.slice(0, 3)} ${otp.slice(3)}` : otp;
 
   return (
     <div className="w-full max-w-md mx-auto bg-slate-900/90 border border-slate-800 rounded-2xl p-6 md:p-8 shadow-2xl backdrop-blur-sm">
       <div className="flex items-center justify-between mb-6 pb-4 border-b border-slate-800">
         <div>
-          <span className="text-xs font-semibold uppercase tracking-wider text-sky-400">Transfer Created</span>
-          <h3 className="text-lg font-bold text-white">Share With Receiver</h3>
+          <span className="text-xs font-semibold uppercase tracking-wider text-sky-400">Transfer Ready</span>
+          <h3 className="text-lg font-bold text-white">Share One-Time Code</h3>
         </div>
         <div className="text-right">
           <span className="text-[11px] uppercase tracking-wider text-slate-400 block">Expires in</span>
@@ -67,48 +66,42 @@ export const OTPDisplay: React.FC<OTPDisplayProps> = ({ roomId, otp, expiresAt, 
       </div>
 
       <div className="space-y-4 mb-6">
-        <div className="bg-slate-950/80 border border-slate-800/90 rounded-xl p-4 flex items-center justify-between">
-          <div>
-            <span className="text-[11px] font-medium text-slate-400 uppercase tracking-wider block">Room ID</span>
-            <span className="text-lg font-mono font-bold text-white tracking-wide">{roomId}</span>
+        <div className="bg-slate-950/90 border-2 border-sky-500/40 rounded-2xl p-6 text-center shadow-inner">
+          <div className="flex items-center justify-center gap-1.5 text-xs font-semibold text-sky-400 uppercase tracking-wider mb-2">
+            <KeyRound className="w-4 h-4" />
+            <span>6-Digit Transfer OTP</span>
           </div>
-          <button
-            onClick={() => copyToClipboard(roomId, 'room')}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 transition-colors"
-          >
-            {copiedRoom ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-            <span>{copiedRoom ? 'Copied' : 'Copy Room ID'}</span>
-          </button>
-        </div>
 
-        <div className="bg-slate-950/80 border border-sky-900/50 rounded-xl p-4 flex items-center justify-between">
-          <div>
-            <div className="flex items-center gap-1.5 text-[11px] font-medium text-sky-400 uppercase tracking-wider">
-              <KeyRound className="w-3 h-3" />
-              <span>One-Time Password (OTP)</span>
-            </div>
-            <span className="text-2xl font-mono font-extrabold text-sky-300 tracking-widest">{otp}</span>
+          <div className="text-4xl sm:text-5xl font-mono font-extrabold text-white tracking-widest my-2 select-all">
+            {formattedOtp}
           </div>
-          <button
-            onClick={() => copyToClipboard(otp, 'otp')}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-sky-900/60 hover:bg-sky-800 text-sky-200 transition-colors"
-          >
-            {copiedOtp ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-            <span>{copiedOtp ? 'Copied' : 'Copy OTP'}</span>
-          </button>
+
+          <p className="text-xs text-slate-400 mt-2">
+            Share this code with the receiver. Once verified, direct P2P streaming will begin.
+          </p>
+
+          <div className="mt-5 flex items-center justify-center gap-3">
+            <button
+              onClick={() => copyToClipboard(otp, 'otp')}
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold bg-sky-600 hover:bg-sky-500 text-white transition-all shadow-md shadow-sky-600/20"
+            >
+              {copiedOtp ? <Check className="w-4 h-4 text-emerald-300" /> : <Copy className="w-4 h-4" />}
+              <span>{copiedOtp ? 'Code Copied!' : 'Copy Code'}</span>
+            </button>
+
+            <button
+              onClick={() => copyToClipboard(shareUrl, 'link')}
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-all"
+            >
+              {copiedLink ? <Check className="w-4 h-4 text-emerald-400" /> : <Share2 className="w-4 h-4 text-sky-400" />}
+              <span>{copiedLink ? 'Link Copied!' : 'Copy Link'}</span>
+            </button>
+          </div>
         </div>
       </div>
 
-      <button
-        onClick={() => copyToClipboard(shareText, 'all')}
-        className="w-full mb-6 flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-xs font-medium bg-slate-800 hover:bg-slate-700 active:bg-slate-850 text-slate-200 transition-colors border border-slate-700"
-      >
-        {copiedAll ? <Check className="w-4 h-4 text-emerald-400" /> : <Share2 className="w-4 h-4 text-sky-400" />}
-        <span>{copiedAll ? 'Copied Share Info to Clipboard!' : 'Copy Combined Share Information'}</span>
-      </button>
-
       <div className="pt-4 border-t border-slate-800 flex items-center justify-between">
-        <span className="text-xs text-slate-400">Connection:</span>
+        <span className="text-xs text-slate-400">Receiver Status:</span>
         <ConnectionStatus state={state} />
       </div>
     </div>

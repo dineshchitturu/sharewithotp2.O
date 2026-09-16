@@ -1,69 +1,86 @@
-import React, { useState } from 'react';
-import { ArrowRight, KeyRound, Lock } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { ArrowRight, KeyRound, ShieldCheck } from 'lucide-react';
 
 interface RoomJoinerProps {
-  onJoin: (roomId: string, otp: string) => Promise<void>;
+  onJoin: (otp: string) => Promise<void>;
   isLoading: boolean;
   attemptsRemaining?: number | null;
+  initialOtp?: string;
 }
 
-export const RoomJoiner: React.FC<RoomJoinerProps> = ({ onJoin, isLoading, attemptsRemaining }) => {
-  const [roomId, setRoomId] = useState('');
-  const [otp, setOtp] = useState('');
+export const RoomJoiner: React.FC<RoomJoinerProps> = ({
+  onJoin,
+  isLoading,
+  attemptsRemaining,
+  initialOtp = '',
+}) => {
+  const [otp, setOtp] = useState(initialOtp);
   const [validationError, setValidationError] = useState<string | null>(null);
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const cleanRoom = roomId.trim().toLowerCase();
-    const cleanOtp = otp.trim();
-
-    if (!cleanRoom) {
-      setValidationError('Please enter the Room ID.');
-      return;
+  useEffect(() => {
+    if (initialOtp && initialOtp.length === 6) {
+      setOtp(initialOtp);
     }
+  }, [initialOtp]);
+
+  const handleSubmit = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const cleanOtp = otp.trim().replace(/\s+/g, '');
+
     if (!cleanOtp || !/^\d{6}$/.test(cleanOtp)) {
-      setValidationError('Please enter the 6-digit OTP code.');
+      setValidationError('Please enter a valid 6-digit OTP code.');
       return;
     }
 
     setValidationError(null);
-    onJoin(cleanRoom, cleanOtp);
+    onJoin(cleanOtp);
+  };
+
+  const handleOtpChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const rawVal = e.target.value.replace(/\D/g, '').slice(0, 6);
+    setOtp(rawVal);
+    setValidationError(null);
+
+    // Auto-submit when user finishes entering 6 digits
+    if (rawVal.length === 6 && !isLoading) {
+      setTimeout(() => {
+        onJoin(rawVal);
+      }, 100);
+    }
+  };
+
+  const handlePaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    e.preventDefault();
+    const pasted = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6);
+    if (pasted) {
+      setOtp(pasted);
+      setValidationError(null);
+      if (pasted.length === 6 && !isLoading) {
+        setTimeout(() => {
+          onJoin(pasted);
+        }, 100);
+      }
+    }
   };
 
   return (
-    <div className="w-full max-w-md mx-auto bg-slate-900/80 border border-slate-800/80 rounded-2xl p-6 md:p-8 shadow-xl backdrop-blur-sm">
+    <div className="w-full max-w-md mx-auto bg-slate-900/90 border border-slate-800/90 rounded-2xl p-6 md:p-8 shadow-2xl backdrop-blur-sm">
       <div className="text-center mb-6">
-        <h2 className="text-xl font-bold tracking-tight text-white mb-2">Join Transfer</h2>
-        <p className="text-sm text-slate-400">
-          Enter the temporary Room ID and 6-digit OTP shared by the sender.
+        <div className="w-12 h-12 rounded-2xl bg-sky-950/80 border border-sky-500/30 text-sky-400 flex items-center justify-center mx-auto mb-3">
+          <KeyRound className="w-6 h-6" />
+        </div>
+        <h2 className="text-2xl font-bold tracking-tight text-white mb-2">Receive File</h2>
+        <p className="text-sm text-slate-400 max-w-sm mx-auto">
+          Enter the 6-digit one-time password shared by the sender to connect and download.
         </p>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
-          <label htmlFor="joinRoomId" className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
-            Room ID
-          </label>
-          <input
-            id="joinRoomId"
-            type="text"
-            value={roomId}
-            onChange={(e) => {
-              setRoomId(e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, ''));
-              setValidationError(null);
-            }}
-            placeholder="e.g. dinesh123"
-            maxLength={30}
-            autoFocus
-            className="w-full px-4 py-3 bg-slate-950/70 border border-slate-700/80 rounded-xl text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-sky-500/50 focus:border-sky-500 font-mono text-base transition-all"
-          />
-        </div>
-
-        <div>
           <div className="flex items-center justify-between mb-2">
-            <label htmlFor="joinOtp" className="text-xs font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-1">
+            <label htmlFor="joinOtp" className="text-xs font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
               <KeyRound className="w-3.5 h-3.5 text-sky-400" />
-              <span>6-Digit OTP</span>
+              <span>Enter 6-Digit Code</span>
             </label>
             {attemptsRemaining !== null && attemptsRemaining !== undefined && (
               <span className="text-xs font-medium text-amber-400">
@@ -71,6 +88,7 @@ export const RoomJoiner: React.FC<RoomJoinerProps> = ({ onJoin, isLoading, attem
               </span>
             )}
           </div>
+
           <input
             id="joinOtp"
             type="text"
@@ -78,29 +96,28 @@ export const RoomJoiner: React.FC<RoomJoinerProps> = ({ onJoin, isLoading, attem
             pattern="[0-9]*"
             maxLength={6}
             value={otp}
-            onChange={(e) => {
-              setOtp(e.target.value.replace(/\D/g, '').slice(0, 6));
-              setValidationError(null);
-            }}
-            placeholder="583921"
-            className="w-full px-4 py-3 bg-slate-950/70 border border-slate-700/80 rounded-xl text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-sky-500/50 focus:border-sky-500 font-mono text-lg tracking-widest text-center font-bold transition-all"
+            onChange={handleOtpChange}
+            onPaste={handlePaste}
+            placeholder="• • • • • •"
+            autoFocus
+            className="w-full px-4 py-4 bg-slate-950/90 border-2 border-slate-700 hover:border-slate-600 focus:border-sky-500 focus:ring-4 focus:ring-sky-500/20 rounded-2xl text-slate-100 placeholder-slate-600 focus:outline-none font-mono text-3xl tracking-[0.4em] text-center font-extrabold transition-all"
           />
         </div>
 
         {validationError && (
-          <p className="text-xs text-rose-400 mt-2">{validationError}</p>
+          <p className="text-xs text-rose-400 font-medium text-center">{validationError}</p>
         )}
 
         <button
           type="submit"
-          disabled={isLoading || !roomId.trim() || otp.length !== 6}
-          className="w-full mt-4 flex items-center justify-center gap-2 py-3.5 px-6 rounded-xl font-medium text-white bg-sky-600 hover:bg-sky-500 active:bg-sky-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg shadow-sky-600/20"
+          disabled={isLoading || otp.length !== 6}
+          className="w-full mt-2 flex items-center justify-center gap-2 py-4 px-6 rounded-xl font-semibold text-white bg-sky-600 hover:bg-sky-500 active:bg-sky-700 disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-lg shadow-sky-600/20 text-sm"
         >
           {isLoading ? (
             <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
           ) : (
             <>
-              <span>Connect</span>
+              <span>Connect & Receive File</span>
               <ArrowRight className="w-4 h-4" />
             </>
           )}
@@ -108,8 +125,8 @@ export const RoomJoiner: React.FC<RoomJoinerProps> = ({ onJoin, isLoading, attem
       </form>
 
       <div className="mt-6 pt-5 border-t border-slate-800/80 flex items-center justify-center gap-2 text-xs text-slate-400">
-        <Lock className="w-4 h-4 text-sky-400" />
-        <span>End-to-End P2P WebRTC Encryption</span>
+        <ShieldCheck className="w-4 h-4 text-emerald-400" />
+        <span>Direct Browser-to-Browser WebRTC Connection</span>
       </div>
     </div>
   );

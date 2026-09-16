@@ -15,7 +15,8 @@ interface ReceiveProps {
 
 export const Receive: React.FC<ReceiveProps> = ({ onBack }) => {
   const [step, setStep] = useState<'join' | 'transferring' | 'completed'>('join');
-  const [roomId, setRoomId] = useState<string>('');
+  const [otp, setOtp] = useState<string>('');
+  const [initialOtp, setInitialOtp] = useState<string>('');
   const [fileName, setFileName] = useState<string>('Receiving File...');
   const [fileSize, setFileSize] = useState<number>(0);
   const [transferState, setTransferState] = useState<TransferState>('CREATED');
@@ -33,6 +34,13 @@ export const Receive: React.FC<ReceiveProps> = ({ onBack }) => {
   const isCompletedRef = useRef<boolean>(false);
 
   useEffect(() => {
+    // Read ?otp= or ?code= from URL parameters if present
+    const params = new URLSearchParams(window.location.search);
+    const codeParam = params.get('otp') || params.get('code');
+    if (codeParam && /^\d{6}$/.test(codeParam.trim())) {
+      setInitialOtp(codeParam.trim());
+    }
+
     return () => {
       cleanupTransfer();
     };
@@ -53,13 +61,15 @@ export const Receive: React.FC<ReceiveProps> = ({ onBack }) => {
     }
   };
 
-  const handleJoin = async (enteredRoomId: string, enteredOtp: string) => {
+  const handleJoin = async (enteredOtp: string) => {
+    const cleanOtp = enteredOtp.trim();
     setIsLoading(true);
     setErrorMessage(null);
     isCompletedRef.current = false;
+    setOtp(cleanOtp);
 
     try {
-      const verifyResp = await verifyOTP(enteredRoomId, enteredOtp);
+      const verifyResp = await verifyOTP(cleanOtp);
 
       if (!verifyResp.success || !verifyResp.session_token) {
         setAttemptsRemaining(verifyResp.attempts_remaining);
@@ -68,11 +78,10 @@ export const Receive: React.FC<ReceiveProps> = ({ onBack }) => {
         return;
       }
 
-      setRoomId(enteredRoomId);
       setTransferState('RECEIVER_AUTHENTICATED');
       const receiverToken = verifyResp.session_token;
 
-      const signaling = new SignalingClient(enteredRoomId, 'receiver', receiverToken);
+      const signaling = new SignalingClient(cleanOtp, 'receiver', receiverToken);
       signalingRef.current = signaling;
 
       const webrtc = new WebRTCManager(
@@ -125,9 +134,7 @@ export const Receive: React.FC<ReceiveProps> = ({ onBack }) => {
               if (signalingRef.current) {
                 signalingRef.current.sendComplete();
               }
-              setTimeout(() => {
-                cleanupTransfer();
-              }, 500);
+              // Gracefully maintain connection so file download completes without network aborts
             },
             onError: (err) => {
               if (!isCompletedRef.current) {
@@ -163,7 +170,7 @@ export const Receive: React.FC<ReceiveProps> = ({ onBack }) => {
           setErrorMessage(null);
           setTransferState('COMPLETED');
           setStep('completed');
-          cleanupTransfer();
+          // Gracefully maintain connection
         } else if (msg.type === 'transfer-cancelled') {
           if (!isCompletedRef.current) {
             setTransferState('CANCELLED');
@@ -202,7 +209,7 @@ export const Receive: React.FC<ReceiveProps> = ({ onBack }) => {
   const handleReset = () => {
     cleanupTransfer();
     isCompletedRef.current = false;
-    setRoomId('');
+    setOtp('');
     setFileName('Receiving File...');
     setFileSize(0);
     setDownloadUrl(null);
@@ -222,9 +229,10 @@ export const Receive: React.FC<ReceiveProps> = ({ onBack }) => {
         >
           ← Back to Home
         </button>
-        {step !== 'join' && (
-          <span className="text-xs font-mono text-slate-500">
-            Room: <strong className="text-slate-300">{roomId}</strong>
+        {step !== 'join' && otp && (
+          <span className="text-xs font-mono text-slate-400 bg-slate-900/90 px-3 py-1 rounded-full border border-slate-800 flex items-center gap-1.5">
+            <span>Code:</span>
+            <strong className="text-sky-300 font-bold">{otp.length === 6 ? `${otp.slice(0, 3)} ${otp.slice(3)}` : otp}</strong>
           </span>
         )}
       </div>
@@ -238,6 +246,7 @@ export const Receive: React.FC<ReceiveProps> = ({ onBack }) => {
           onJoin={handleJoin}
           isLoading={isLoading}
           attemptsRemaining={attemptsRemaining}
+          initialOtp={initialOtp}
         />
       )}
 

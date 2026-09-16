@@ -23,7 +23,15 @@ const LinkedinIcon = ({ className = "w-3.5 h-3.5" }: { className?: string }) => 
 export type AppView = 'home' | 'send' | 'receive' | 'how-it-works' | 'about' | 'privacy' | 'terms';
 
 export function App() {
-  const [currentView, setCurrentView] = useState<AppView>('home');
+  const [currentView, setCurrentView] = useState<AppView>(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('otp') || params.get('code')) {
+        return 'receive';
+      }
+    }
+    return 'home';
+  });
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-sky-500/30 selection:text-sky-200">

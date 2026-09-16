@@ -20,6 +20,7 @@ export class FileSender {
   private totalBytes: number = 0;
   private totalChunks: number = 0;
   private transferStartTime: number = 0;
+  private ackResolver: ((ack: { verified: boolean; hash?: string }) => void) | null = null;
 
   constructor(
     dataChannel: RTCDataChannel,
@@ -41,6 +42,10 @@ export class FileSender {
           const message = JSON.parse(event.data);
           if (message.type === 'transfer_ack') {
             console.info('[FileSender] Received transfer_ack from receiver:', message);
+            if (this.ackResolver) {
+              this.ackResolver({ verified: Boolean(message.verified), hash: message.hash });
+              this.ackResolver = null;
+            }
             this.callbacks.onComplete(undefined, message.verified, message.hash);
           } else if (message.type === 'transfer_progress') {
             // Receiver reported acknowledged progress - synchronize sender in real-time
@@ -170,8 +175,9 @@ export class FileSender {
 
     const finalHash = hasher ? hasher.digest('hex') : '';
 
+    // Wait until all chunk bytes have completely drained from SCTP buffer
     if (this.dataChannel.bufferedAmount > 0) {
-      await this.waitForBufferDrain();
+      await this.waitForDrainToZero(30000);
     }
 
     // 2. Send Trailer with calculated SHA-256 hash
@@ -180,8 +186,37 @@ export class FileSender {
       hash: finalHash,
     });
     this.dataChannel.send(trailerMsg);
+    await this.waitForDrainToZero(5000);
 
-    this.callbacks.onComplete(undefined, true, finalHash);
+    // Update progress to 100% on sender
+    this.callbacks.onProgress({
+      bytesTransferred: this.totalBytes,
+      totalBytes: this.totalBytes,
+      percentage: 100,
+      speedBytesPerSec: 0,
+      remainingSeconds: 0,
+      currentChunk: this.totalChunks,
+      totalChunks: this.totalChunks,
+    });
+
+    // Wait for receiver to acknowledge full receipt and verification
+    let receiverAckReceived = false;
+    await new Promise<void>((resolve) => {
+      const timeout = setTimeout(() => {
+        console.warn('[FileSender] Timed out waiting for receiver transfer_ack, proceeding with completion.');
+        resolve();
+      }, 8000);
+
+      this.ackResolver = (_ack) => {
+        clearTimeout(timeout);
+        receiverAckReceived = true;
+        resolve();
+      };
+    });
+
+    if (!receiverAckReceived) {
+      this.callbacks.onComplete(undefined, true, finalHash);
+    }
   }
 
   private waitForBufferDrain(): Promise<void> {
@@ -192,6 +227,34 @@ export class FileSender {
       };
       this.dataChannel.addEventListener('bufferedamountlow', onBufferedAmountLow);
     });
+  }
+
+  private async waitForDrainToZero(timeoutMs: number = 30000): Promise<void> {
+    if (this.dataChannel.bufferedAmount === 0) return;
+    const startTime = performance.now();
+
+    this.dataChannel.bufferedAmountLowThreshold = 0;
+
+    while (this.dataChannel.bufferedAmount > 0) {
+      if (performance.now() - startTime > timeoutMs) {
+        console.warn('[FileSender] Timed out waiting for buffer to drain to 0, remaining:', this.dataChannel.bufferedAmount);
+        break;
+      }
+      await new Promise<void>((resolve) => {
+        const onLow = () => {
+          this.dataChannel.removeEventListener('bufferedamountlow', onLow);
+          resolve();
+        };
+        this.dataChannel.addEventListener('bufferedamountlow', onLow);
+        setTimeout(() => {
+          this.dataChannel.removeEventListener('bufferedamountlow', onLow);
+          resolve();
+        }, 100);
+      });
+    }
+
+    // Restore threshold for normal operations
+    this.dataChannel.bufferedAmountLowThreshold = LOW_WATER_MARK;
   }
 }
 
@@ -204,6 +267,8 @@ export class FileReceiver {
   private bytesSinceLastProgress: number = 0;
   private lastReportTime: number = 0;
   private isCancelled: boolean = false;
+  private isCompleted: boolean = false;
+  private autoFinalizeTimeout: any = null;
   private hasher: any = null;
   private dataChannel: RTCDataChannel;
   private callbacks: TransferCallbacks;
@@ -260,6 +325,10 @@ export class FileReceiver {
 
   public cancel(): void {
     this.isCancelled = true;
+    if (this.autoFinalizeTimeout) {
+      clearTimeout(this.autoFinalizeTimeout);
+      this.autoFinalizeTimeout = null;
+    }
     this.cleanup();
   }
 
@@ -341,9 +410,29 @@ export class FileReceiver {
       this.lastProgressTime = now;
       this.bytesSinceLastProgress = 0;
     }
+
+    // Fallback: If all bytes have been received, start safety timer to finalize even if trailer is lost
+    if (this.bytesReceived >= this.metadata.size && !this.isCompleted) {
+      if (!this.autoFinalizeTimeout) {
+        this.autoFinalizeTimeout = setTimeout(() => {
+          if (!this.isCompleted) {
+            console.warn('[FileReceiver] All bytes received but trailer delayed. Auto-finalizing transfer.');
+            this.handleTrailer(undefined);
+          }
+        }, 2000);
+      }
+    }
   }
 
   private async handleTrailer(senderHash?: string): Promise<void> {
+    if (this.isCompleted) return;
+    this.isCompleted = true;
+
+    if (this.autoFinalizeTimeout) {
+      clearTimeout(this.autoFinalizeTimeout);
+      this.autoFinalizeTimeout = null;
+    }
+
     if (!this.metadata) return;
 
     const computedHash = this.hasher ? this.hasher.digest('hex') : undefined;

@@ -1,4 +1,4 @@
-﻿import React from 'react';
+import React from 'react';
 import { ArrowLeft, ShieldCheck, Lock, EyeOff, ServerOff, Clock } from 'lucide-react';
 
 interface PrivacyPolicyProps {
@@ -76,7 +76,7 @@ export const PrivacyPolicy: React.FC<PrivacyPolicyProps> = ({ onBack }) => {
           <ul className="list-disc list-inside space-y-1 text-slate-400 mb-3 ml-2">
             <li>Rooms automatically expire after 15 minutes of inactivity.</li>
             <li>Sessions are immediately destroyed upon transfer completion.</li>
-            <li>All memory associated with the room ID is purged immediately.</li>
+            <li>All memory associated with the transfer session and OTP is purged immediately.</li>
           </ul>
         </section>
 

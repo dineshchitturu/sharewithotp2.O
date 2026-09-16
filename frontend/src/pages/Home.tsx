@@ -37,7 +37,7 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
           </div>
           <h2 className="text-2xl font-bold text-white mb-2">Send File</h2>
           <p className="text-sm text-slate-400 leading-relaxed mb-6">
-            Create a temporary room ID, get a secure 6-digit OTP, and stream files directly to the receiver.
+            Select your file, get a secure 6-digit OTP, and stream files directly to the receiver.
           </p>
           <span className="mt-auto inline-flex items-center gap-1 text-sm font-semibold text-sky-400 group-hover:text-sky-300">
             Create Transfer →
@@ -54,10 +54,10 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
           </div>
           <h2 className="text-2xl font-bold text-white mb-2">Receive File</h2>
           <p className="text-sm text-slate-400 leading-relaxed mb-6">
-            Enter the sender&apos;s temporary Room ID and OTP to establish an encrypted P2P data connection.
+            Enter the sender&apos;s 6-digit OTP to establish an encrypted P2P data connection and download.
           </p>
           <span className="mt-auto inline-flex items-center gap-1 text-sm font-semibold text-emerald-400 group-hover:text-emerald-300">
-            Join Transfer →
+            Receive File →
           </span>
         </button>
       </div>
@@ -91,7 +91,7 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
             </div>
             <h4 className="text-sm font-semibold text-white mb-1">Temporary Sessions</h4>
             <p className="text-xs text-slate-400 leading-relaxed">
-              Transfer rooms self-destruct immediately upon completion. Room IDs cannot be reused once destroyed.
+              Transfer sessions self-destruct immediately upon completion. Sessions cannot be reused once destroyed.
             </p>
           </div>
         </div>
