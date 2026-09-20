@@ -37,6 +37,8 @@ export class WebRTCManager {
           stunServer,
           'stun:stun1.l.google.com:19302',
           'stun:stun2.l.google.com:19302',
+          'stun:stun3.l.google.com:19302',
+          'stun:stun4.l.google.com:19302',
           'stun:stun.cloudflare.com:3478',
         ],
       },
@@ -48,6 +50,17 @@ export class WebRTCManager {
         urls: turnServer,
         username: this.config.turnUsername || import.meta.env.VITE_TURN_USERNAME,
         credential: this.config.turnCredential || import.meta.env.VITE_TURN_CREDENTIAL,
+      });
+    } else {
+      // Default community TURN relay fallback to guarantee connectivity across cellular / symmetric NATs
+      iceServers.push({
+        urls: [
+          'turn:openrelay.metered.ca:80',
+          'turn:openrelay.metered.ca:443',
+          'turn:openrelay.metered.ca:443?transport=tcp',
+        ],
+        username: 'openrelayproject',
+        credential: 'openrelayproject',
       });
     }
 
@@ -104,6 +117,23 @@ export class WebRTCManager {
     const offer = await this.pc.createOffer();
     await this.pc.setLocalDescription(offer);
     return offer;
+  }
+
+  public async restartIce(): Promise<RTCSessionDescriptionInit | null> {
+    if (!this.pc) return null;
+    try {
+      console.info('[WebRTC] Initiating ICE restart offer...');
+      const offer = await this.pc.createOffer({ iceRestart: true });
+      await this.pc.setLocalDescription(offer);
+      return offer;
+    } catch (err) {
+      console.warn('[WebRTC] ICE restart failed:', err);
+      return null;
+    }
+  }
+
+  public isDataChannelOpen(): boolean {
+    return this.dataChannel !== null && this.dataChannel.readyState === 'open';
   }
 
   public async handleOffer(offer: RTCSessionDescriptionInit): Promise<RTCSessionDescriptionInit> {

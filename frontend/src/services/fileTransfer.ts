@@ -122,6 +122,11 @@ export class FileSender {
         return;
       }
 
+      if (this.dataChannel.readyState !== 'open') {
+        this.callbacks.onError('DataChannel closed during file transfer.');
+        return;
+      }
+
       const start = chunkIndex * this.chunkSize;
       const end = Math.min(start + this.chunkSize, this.totalBytes);
       const slice = file.slice(start, end);
@@ -143,10 +148,20 @@ export class FileSender {
         return;
       }
 
+      if (this.dataChannel.readyState !== 'open') {
+        this.callbacks.onError('DataChannel closed during file transfer.');
+        return;
+      }
+
       this.dataChannel.send(arrayBuffer);
 
       bytesTransferred += arrayBuffer.byteLength;
       bytesSinceLastProgress += arrayBuffer.byteLength;
+
+      // Yield every 16 chunks (~1 MB) to prevent event loop starvation and keep WebRTC keepalives active
+      if (chunkIndex % 16 === 0) {
+        await new Promise((r) => setTimeout(r, 0));
+      }
 
       const now = performance.now();
       const timeDeltaSec = (now - lastProgressTime) / 1000;
@@ -224,7 +239,7 @@ export class FileSender {
     if (!this.dataChannel || this.dataChannel.bufferedAmount <= LOW_WATER_MARK) {
       return Promise.resolve();
     }
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
       let isDone = false;
 
       const cleanup = () => {
@@ -241,14 +256,28 @@ export class FileSender {
       this.dataChannel.addEventListener('bufferedamountlow', onBufferedAmountLow);
 
       const pollTimer = setInterval(() => {
-        if (!this.dataChannel || this.dataChannel.bufferedAmount <= LOW_WATER_MARK) {
+        if (!this.dataChannel || this.dataChannel.readyState !== 'open') {
+          if (!isDone) {
+            isDone = true;
+            clearInterval(pollTimer);
+            clearTimeout(timeoutTimer);
+            this.dataChannel.removeEventListener('bufferedamountlow', onBufferedAmountLow);
+            reject(new Error('DataChannel closed while waiting for buffer drain'));
+          }
+        } else if (this.dataChannel.bufferedAmount <= LOW_WATER_MARK) {
           cleanup();
         }
-      }, 40);
+      }, 30);
 
+      // Extended safety timeout to allow large chunks over slower connections
       const timeoutTimer = setTimeout(() => {
-        cleanup();
-      }, 5000);
+        if (this.dataChannel && this.dataChannel.readyState === 'open') {
+          console.warn('[FileSender] Buffer drain waiting exceeded 45s, bufferedAmount:', this.dataChannel.bufferedAmount);
+          cleanup();
+        } else {
+          reject(new Error('Buffer drain timeout and DataChannel closed'));
+        }
+      }, 45000);
     });
   }
 
@@ -283,7 +312,11 @@ export class FileSender {
 
 export class FileReceiver {
   private metadata: FileMetadata | null = null;
-  private receivedChunks: ArrayBuffer[] = [];
+  private blobParts: Blob[] = [];
+  private currentBatch: ArrayBuffer[] = [];
+  private currentBatchBytes: number = 0;
+  private readonly BATCH_THRESHOLD: number = 8 * 1024 * 1024; // 8 MB per Blob slice
+  private totalChunksReceived: number = 0;
   private bytesReceived: number = 0;
   private startTime: number = 0;
   private lastProgressTime: number = 0;
@@ -322,6 +355,7 @@ export class FileReceiver {
     this.isProcessingQueue = true;
 
     try {
+      let itemsProcessed = 0;
       while (this.messageQueue.length > 0) {
         if (this.isCancelled) break;
         const data = this.messageQueue.shift()!;
@@ -340,6 +374,12 @@ export class FileReceiver {
         } else if (data instanceof ArrayBuffer) {
           await this.handleChunk(data);
         }
+
+        itemsProcessed++;
+        if (itemsProcessed >= 20) {
+          itemsProcessed = 0;
+          await new Promise((r) => setTimeout(r, 0));
+        }
       }
     } finally {
       this.isProcessingQueue = false;
@@ -357,7 +397,10 @@ export class FileReceiver {
 
   private async handleHeader(meta: FileMetadata): Promise<void> {
     this.metadata = meta;
-    this.receivedChunks = [];
+    this.blobParts = [];
+    this.currentBatch = [];
+    this.currentBatchBytes = 0;
+    this.totalChunksReceived = 0;
     this.bytesReceived = 0;
     this.startTime = performance.now();
     this.lastProgressTime = this.startTime;
@@ -387,9 +430,18 @@ export class FileReceiver {
   private async handleChunk(chunk: ArrayBuffer): Promise<void> {
     if (!this.metadata) return;
 
-    this.receivedChunks.push(chunk);
+    this.currentBatch.push(chunk);
+    this.currentBatchBytes += chunk.byteLength;
+    this.totalChunksReceived++;
     this.bytesReceived += chunk.byteLength;
     this.bytesSinceLastProgress += chunk.byteLength;
+
+    // Flush batch to off-heap Blob slice when threshold reached to prevent V8 heap OOM
+    if (this.currentBatchBytes >= this.BATCH_THRESHOLD) {
+      this.blobParts.push(new Blob(this.currentBatch));
+      this.currentBatch = [];
+      this.currentBatchBytes = 0;
+    }
 
     if (this.hasher) {
       this.hasher.update(new Uint8Array(chunk));
@@ -410,15 +462,15 @@ export class FileReceiver {
         percentage,
         speedBytesPerSec: speed,
         remainingSeconds,
-        currentChunk: this.receivedChunks.length,
+        currentChunk: this.totalChunksReceived,
         totalChunks: this.metadata.totalChunks,
       });
 
-      // Synchronize progress back to sender via DataChannel
+      // Synchronize progress back to sender via DataChannel (throttled to 400ms)
       if (
         this.dataChannel &&
         this.dataChannel.readyState === 'open' &&
-        (now - this.lastReportTime >= 150 || this.bytesReceived >= this.metadata.size)
+        (now - this.lastReportTime >= 400 || this.bytesReceived >= this.metadata.size)
       ) {
         try {
           this.dataChannel.send(
@@ -436,7 +488,7 @@ export class FileReceiver {
       this.bytesSinceLastProgress = 0;
     }
 
-    // Fallback: If all bytes have been received, start safety timer to finalize even if trailer is lost
+    // Fallback: If all bytes have been received, start safety timer to finalize even if trailer is delayed
     if (this.bytesReceived >= this.metadata.size && !this.isCompleted) {
       if (!this.autoFinalizeTimeout) {
         this.autoFinalizeTimeout = setTimeout(() => {
@@ -460,6 +512,13 @@ export class FileReceiver {
 
     if (!this.metadata) return;
 
+    // Flush any remaining chunks into blobParts
+    if (this.currentBatch.length > 0) {
+      this.blobParts.push(new Blob(this.currentBatch));
+      this.currentBatch = [];
+      this.currentBatchBytes = 0;
+    }
+
     const computedHash = this.hasher ? this.hasher.digest('hex') : undefined;
     const isVerified = Boolean(
       senderHash && computedHash && senderHash.toLowerCase() === computedHash.toLowerCase()
@@ -469,7 +528,7 @@ export class FileReceiver {
       `[FileReceiver] Transfer complete. Hash verified: ${isVerified}. Sender Hash: ${senderHash}, Computed: ${computedHash}`
     );
 
-    const blob = new Blob(this.receivedChunks, {
+    const blob = new Blob(this.blobParts, {
       type: this.metadata.type || 'application/octet-stream',
     });
 
@@ -507,7 +566,10 @@ export class FileReceiver {
   }
 
   private cleanup(): void {
-    this.receivedChunks = [];
+    this.blobParts = [];
+    this.currentBatch = [];
+    this.currentBatchBytes = 0;
+    this.totalChunksReceived = 0;
     this.hasher = null;
     this.messageQueue = [];
   }

@@ -32,6 +32,7 @@ export const Send: React.FC<SendProps> = ({ onBack }) => {
   const isCompletedRef = useRef<boolean>(false);
   const selectedFileRef = useRef<File | null>(null);
   const isStreamingRef = useRef<boolean>(false);
+  const disconnectTimeoutRef = useRef<number | null>(null);
 
   useEffect(() => {
     return () => {
@@ -40,6 +41,10 @@ export const Send: React.FC<SendProps> = ({ onBack }) => {
   }, []);
 
   const cleanupTransfer = () => {
+    if (disconnectTimeoutRef.current !== null) {
+      window.clearTimeout(disconnectTimeoutRef.current);
+      disconnectTimeoutRef.current = null;
+    }
     isStreamingRef.current = false;
     if (fileSenderRef.current) {
       fileSenderRef.current.cancel();
@@ -82,12 +87,46 @@ export const Send: React.FC<SendProps> = ({ onBack }) => {
         (state) => {
           console.info('[Sender WebRTC State]:', state);
           if (state === 'connected') {
-            setTransferState('CONNECTED');
-          } else if (state === 'disconnected' || state === 'failed') {
-            if (!isCompletedRef.current) {
-              setTransferState('DISCONNECTED');
-              setErrorMessage('Peer connection disconnected.');
+            if (disconnectTimeoutRef.current !== null) {
+              window.clearTimeout(disconnectTimeoutRef.current);
+              disconnectTimeoutRef.current = null;
             }
+            setErrorMessage(null);
+            setTransferState(isStreamingRef.current ? 'TRANSFERRING' : 'CONNECTED');
+          } else if (state === 'disconnected') {
+            if (isCompletedRef.current) return;
+            // WebRTC 'disconnected' is transient. Debounce 8s before declaring error.
+            if (disconnectTimeoutRef.current !== null) {
+              window.clearTimeout(disconnectTimeoutRef.current);
+            }
+            console.warn('[Sender] WebRTC transiently disconnected. Waiting 8s for potential reconnection...');
+            disconnectTimeoutRef.current = window.setTimeout(() => {
+              if (isCompletedRef.current) return;
+              if (webrtcRef.current?.isDataChannelOpen()) {
+                console.info('[Sender] DataChannel is still open, ignoring disconnected state.');
+                return;
+              }
+              setTransferState('DISCONNECTED');
+              setErrorMessage('Peer connection disconnected. Please check connection and try again.');
+            }, 8000);
+          } else if (state === 'failed') {
+            if (isCompletedRef.current) return;
+            console.warn('[Sender] WebRTC connection failed. Attempting ICE restart...');
+            webrtcRef.current?.restartIce().then((offer) => {
+              if (offer && signalingRef.current?.isConnected()) {
+                signalingRef.current.sendOffer(offer);
+              }
+            }).catch(() => {});
+
+            if (disconnectTimeoutRef.current !== null) {
+              window.clearTimeout(disconnectTimeoutRef.current);
+            }
+            disconnectTimeoutRef.current = window.setTimeout(() => {
+              if (!isCompletedRef.current && !webrtcRef.current?.isDataChannelOpen()) {
+                setTransferState('DISCONNECTED');
+                setErrorMessage('Peer connection failed. Could not establish direct P2P connection.');
+              }
+            }, 5000);
           }
         }
       );
@@ -99,6 +138,11 @@ export const Send: React.FC<SendProps> = ({ onBack }) => {
       if (dataChannel) {
         dataChannel.onopen = () => {
           console.info('[Sender] DataChannel opened!');
+          if (disconnectTimeoutRef.current !== null) {
+            window.clearTimeout(disconnectTimeoutRef.current);
+            disconnectTimeoutRef.current = null;
+          }
+          setErrorMessage(null);
           setTransferState('CONNECTED');
           const fileToStream = selectedFileRef.current;
           if (fileToStream && !isStreamingRef.current) {
@@ -155,11 +199,16 @@ export const Send: React.FC<SendProps> = ({ onBack }) => {
           }
         } else if (msg.type === 'peer-left') {
           if (!isCompletedRef.current) {
+            // If DataChannel is still open and actively streaming, don't abort immediately
+            if (isStreamingRef.current && webrtcRef.current?.isDataChannelOpen()) {
+              console.warn('[Sender] Peer left signaling server, but P2P DataChannel is still streaming.');
+              return;
+            }
             setTransferState('DISCONNECTED');
             setErrorMessage('Receiver disconnected from the room.');
           }
         } else if (msg.type === 'error') {
-          if (!isCompletedRef.current) {
+          if (!isCompletedRef.current && !isStreamingRef.current) {
             setErrorMessage(msg.message || 'Signaling error occurred.');
           }
         }
