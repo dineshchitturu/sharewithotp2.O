@@ -37,6 +37,9 @@ export class WebRTCManager {
           stunServer,
           'stun:stun1.l.google.com:19302',
           'stun:stun2.l.google.com:19302',
+          'stun:stun3.l.google.com:19302',
+          'stun:stun4.l.google.com:19302',
+          'stun:stun.cloudflare.com:3478',
         ],
       },
     ];
@@ -47,6 +50,17 @@ export class WebRTCManager {
         urls: turnServer,
         username: this.config.turnUsername || import.meta.env.VITE_TURN_USERNAME,
         credential: this.config.turnCredential || import.meta.env.VITE_TURN_CREDENTIAL,
+      });
+    } else {
+      // Fallback community TURN relay to guarantee connectivity across cellular networks / symmetric NATs
+      iceServers.push({
+        urls: [
+          'turn:openrelay.metered.ca:80',
+          'turn:openrelay.metered.ca:443',
+          'turns:openrelay.metered.ca:443',
+        ],
+        username: 'openrelayproject',
+        credential: 'openrelayproject',
       });
     }
 

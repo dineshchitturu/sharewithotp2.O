@@ -1,7 +1,7 @@
 import type { FileMetadata, TransferProgress } from '../types/transfer';
 
-// Chunk size configuration (default 64 KB, within 64 KB - 256 KB recommended range)
-export const DEFAULT_CHUNK_SIZE = 64 * 1024; // 64 KB
+// Chunk size configuration (16 KB safe cross-browser WebRTC SCTP limit)
+export const DEFAULT_CHUNK_SIZE = 16 * 1024; // 16 KB
 export const HIGH_WATER_MARK = 1024 * 1024; // 1 MB backpressure threshold
 export const LOW_WATER_MARK = 256 * 1024; // 256 KB resume threshold
 
@@ -93,8 +93,8 @@ export class FileSender {
       bytesTransferred += arrayBuffer.byteLength;
       bytesSinceLastProgress += arrayBuffer.byteLength;
 
-      // Yield event loop every 32 chunks (~2 MB) so WebRTC keepalives never stall
-      if (chunkIndex % 32 === 0) {
+      // Yield event loop every 64 chunks (~1 MB) so WebRTC keepalives and UI rendering never stall
+      if (chunkIndex % 64 === 0) {
         await new Promise((r) => setTimeout(r, 0));
       }
 
@@ -152,7 +152,12 @@ export class FileSender {
   }
 
   private waitForBufferDrain(): Promise<void> {
-    if (!this.dataChannel || this.dataChannel.bufferedAmount <= LOW_WATER_MARK) {
+    if (
+      !this.dataChannel ||
+      this.dataChannel.readyState !== 'open' ||
+      this.dataChannel.bufferedAmount <= LOW_WATER_MARK ||
+      this.isCancelled
+    ) {
       return Promise.resolve();
     }
     return new Promise((resolve) => {
@@ -161,20 +166,37 @@ export class FileSender {
       const cleanup = () => {
         if (!isDone) {
           isDone = true;
-          this.dataChannel.removeEventListener('bufferedamountlow', onBufferedAmountLow);
+          try {
+            if (this.dataChannel) {
+              this.dataChannel.removeEventListener('bufferedamountlow', onBufferedAmountLow);
+            }
+          } catch {}
           clearInterval(pollTimer);
+          clearTimeout(safetyTimer);
           resolve();
         }
       };
 
       const onBufferedAmountLow = () => cleanup();
-      this.dataChannel.addEventListener('bufferedamountlow', onBufferedAmountLow);
+      try {
+        this.dataChannel.addEventListener('bufferedamountlow', onBufferedAmountLow);
+      } catch {}
 
       const pollTimer = setInterval(() => {
-        if (!this.dataChannel || this.dataChannel.readyState !== 'open' || this.dataChannel.bufferedAmount <= LOW_WATER_MARK) {
+        if (
+          !this.dataChannel ||
+          this.dataChannel.readyState !== 'open' ||
+          this.dataChannel.bufferedAmount <= LOW_WATER_MARK ||
+          this.isCancelled
+        ) {
           cleanup();
         }
       }, 20);
+
+      // 10-second safety timeout ensures large transfers never get permanently stuck
+      const safetyTimer = setTimeout(() => {
+        cleanup();
+      }, 10000);
     });
   }
 

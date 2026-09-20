@@ -91,7 +91,9 @@ export const Receive: React.FC<ReceiveProps> = ({ onBack }) => {
         return;
       }
 
-      setTransferState('RECEIVER_AUTHENTICATED');
+      // Immediately activate sharing view on receiver so user sees instant connection progress
+      setStep('transferring');
+      setTransferState('CONNECTING');
       const receiverToken = verifyResp.session_token;
 
       const signaling = new SignalingClient(cleanOtp, 'receiver', receiverToken);
@@ -247,14 +249,18 @@ export const Receive: React.FC<ReceiveProps> = ({ onBack }) => {
       });
 
       await signaling.connect();
+      // Instantly request offer from sender to activate sharing immediately
+      signaling.sendRequestOffer();
 
       offerTimeout = setTimeout(() => {
-        if (!isCompletedRef.current && (transferState === 'RECEIVER_AUTHENTICATED' || transferState === 'SIGNALING')) {
+        if (!isCompletedRef.current && webrtcRef.current && !webrtcRef.current.isDataChannelOpen()) {
+          console.info('[Receiver] Retrying request-offer fallback...');
           signaling.sendRequestOffer();
         }
-      }, 3500);
+      }, 2000);
     } catch (err: any) {
       setErrorMessage(err.message || 'Verification or connection failed.');
+      setStep('join');
     } finally {
       setIsLoading(false);
       isJoiningRef.current = false;
