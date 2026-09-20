@@ -1,9 +1,10 @@
 import type { FileMetadata, TransferProgress } from '../types/transfer';
 
-// Chunk size configuration (16 KB safe cross-browser WebRTC SCTP limit)
-export const DEFAULT_CHUNK_SIZE = 16 * 1024; // 16 KB
-export const HIGH_WATER_MARK = 1024 * 1024; // 1 MB backpressure threshold
-export const LOW_WATER_MARK = 256 * 1024; // 256 KB resume threshold
+// Chunk size configuration (1 MB standard chunking with safe SCTP transport slicing)
+export const DEFAULT_CHUNK_SIZE = 1024 * 1024; // 1 MB
+export const HIGH_WATER_MARK = 2 * 1024 * 1024; // 2 MB backpressure threshold
+export const LOW_WATER_MARK = 512 * 1024; // 512 KB resume threshold
+export const SCTP_SLICE_SIZE = 64 * 1024 - 1024; // 63 KB (64,512 bytes) safe cross-browser transport slice
 
 export interface TransferCallbacks {
   onMetadata?: (metadata: FileMetadata) => void;
@@ -78,25 +79,26 @@ export class FileSender {
 
       const arrayBuffer = await slice.arrayBuffer();
 
-      // Backpressure management: wait if buffer exceeds HIGH_WATER_MARK
-      if (this.dataChannel.bufferedAmount > HIGH_WATER_MARK) {
-        await this.waitForBufferDrain();
+      // Transmit the 1 MB chunk across the data channel via safe SCTP transport slices
+      for (let offset = 0; offset < arrayBuffer.byteLength; offset += SCTP_SLICE_SIZE) {
+        if (this.dataChannel.bufferedAmount > HIGH_WATER_MARK) {
+          await this.waitForBufferDrain();
+        }
+
+        if (this.isCancelled || this.dataChannel.readyState !== 'open') {
+          this.callbacks.onError('Transfer interrupted.');
+          return;
+        }
+
+        const fragment = arrayBuffer.slice(offset, Math.min(offset + SCTP_SLICE_SIZE, arrayBuffer.byteLength));
+        this.dataChannel.send(fragment);
+
+        bytesTransferred += fragment.byteLength;
+        bytesSinceLastProgress += fragment.byteLength;
       }
 
-      if (this.isCancelled || this.dataChannel.readyState !== 'open') {
-        this.callbacks.onError('Transfer interrupted.');
-        return;
-      }
-
-      this.dataChannel.send(arrayBuffer);
-
-      bytesTransferred += arrayBuffer.byteLength;
-      bytesSinceLastProgress += arrayBuffer.byteLength;
-
-      // Yield event loop every 64 chunks (~1 MB) so WebRTC keepalives and UI rendering never stall
-      if (chunkIndex % 64 === 0) {
-        await new Promise((r) => setTimeout(r, 0));
-      }
+      // Yield event loop after each 1 MB chunk so WebRTC keepalives and UI rendering never stall
+      await new Promise((r) => setTimeout(r, 0));
 
       const now = performance.now();
       const timeDeltaSec = (now - lastProgressTime) / 1000;
@@ -245,7 +247,7 @@ export class FileReceiver {
   private blobParts: Blob[] = [];
   private currentBatch: ArrayBuffer[] = [];
   private currentBatchBytes: number = 0;
-  private readonly BATCH_THRESHOLD: number = 8 * 1024 * 1024; // 8 MB per Blob slice to keep V8 heap flat
+  private readonly BATCH_THRESHOLD: number = 1024 * 1024; // 1 MB per Blob slice to align with 1 MB standard chunking
   private pendingChunks: ArrayBuffer[] = [];
   private bytesReceived: number = 0;
   private startTime: number = 0;

@@ -120,7 +120,7 @@ export const TransferProgress: React.FC<TransferProgressProps> = ({
         <div className="bg-slate-950/70 border border-slate-800/80 rounded-xl p-3">
           <div className="flex items-center gap-1.5 text-teal-400 mb-1">
             <Layers className="w-3.5 h-3.5" />
-            <span className="text-[10px] text-slate-400 uppercase font-semibold">Packets</span>
+            <span className="text-[10px] text-slate-400 uppercase font-semibold">1 MB Chunks</span>
           </div>
           <span className="font-mono text-xs sm:text-sm font-bold text-slate-100 block truncate">
             {totalChunks > 0 ? `${currentChunk}/${totalChunks}` : `${currentChunk}`}
@@ -134,7 +134,7 @@ export const TransferProgress: React.FC<TransferProgressProps> = ({
           <Activity className="w-3.5 h-3.5 text-sky-400" />
           <span>Zero Server Storage</span>
         </div>
-        <span className="font-mono text-[10px] text-slate-500">64 KB SCTP Chunks</span>
+        <span className="font-mono text-[10px] text-slate-500">1 MB Standard Chunks</span>
       </div>
 
       {onCancel && state !== 'COMPLETED' && state !== 'DESTROYED' && (
