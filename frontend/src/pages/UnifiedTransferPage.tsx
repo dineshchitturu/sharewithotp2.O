@@ -171,11 +171,13 @@ export const UnifiedTransferPage: FC = () => {
           console.info('[Sender WebRTC State]:', state);
           if (state === 'connected') {
             setTransferState('CONNECTED');
-          } else if (state === 'disconnected' || state === 'failed') {
+          } else if (state === 'failed') {
             if (!isCompletedRef.current) {
-              setTransferState('DISCONNECTED');
-              setErrorMessage('Peer connection disconnected.');
+              setTransferState('FAILED');
+              setErrorMessage('Direct peer connection failed. Please check network connectivity.');
             }
+          } else if (state === 'disconnected') {
+            console.warn('[Sender WebRTC] Temporary peer disconnect detected.');
           }
         }
       );
@@ -246,7 +248,21 @@ export const UnifiedTransferPage: FC = () => {
           }
         } else if (msg.type === 'error') {
           if (!isCompletedRef.current) {
-            setErrorMessage(msg.message || 'Signaling error occurred.');
+            const isWsClose =
+              msg.message?.toLowerCase().includes('closed') ||
+              msg.message?.includes('1006');
+            if (
+              isWsClose &&
+              (isStreamingRef.current ||
+                transferState === 'TRANSFERRING' ||
+                transferState === 'CONNECTED')
+            ) {
+              console.info(
+                '[Sender Signaling] WebSocket closed during active WebRTC transfer, ignoring non-fatal error.'
+              );
+            } else {
+              setErrorMessage(msg.message || 'Signaling error occurred.');
+            }
           }
         }
       });
@@ -327,11 +343,13 @@ export const UnifiedTransferPage: FC = () => {
           console.info('[Receiver WebRTC State]:', state);
           if (state === 'connected') {
             setTransferState('CONNECTED');
-          } else if (state === 'disconnected' || state === 'failed') {
+          } else if (state === 'failed') {
             if (!isCompletedRef.current) {
-              setTransferState('DISCONNECTED');
-              setErrorMessage('Peer connection disconnected.');
+              setTransferState('FAILED');
+              setErrorMessage('Direct peer connection failed. Please check network connectivity.');
             }
+          } else if (state === 'disconnected') {
+            console.warn('[Receiver WebRTC] Temporary peer disconnect detected.');
           }
         },
         (dataChannel) => {
@@ -418,7 +436,19 @@ export const UnifiedTransferPage: FC = () => {
           }
         } else if (msg.type === 'error') {
           if (!isCompletedRef.current) {
-            setErrorMessage(msg.message || 'Signaling error occurred.');
+            const isWsClose =
+              msg.message?.toLowerCase().includes('closed') ||
+              msg.message?.includes('1006');
+            if (
+              isWsClose &&
+              (transferState === 'TRANSFERRING' || transferState === 'CONNECTED')
+            ) {
+              console.info(
+                '[Receiver Signaling] WebSocket closed during active WebRTC transfer, ignoring non-fatal error.'
+              );
+            } else {
+              setErrorMessage(msg.message || 'Signaling error occurred.');
+            }
           }
         }
       });
@@ -501,12 +531,12 @@ export const UnifiedTransferPage: FC = () => {
       />
 
       {/* Main Single-Page Hero & Interactive Workspace */}
-      <main className="flex-1 flex flex-col items-center justify-start relative">
+      <main className="flex-1 flex flex-col items-center justify-start relative w-full">
         {/* Ambient background glows */}
-        <div className="absolute top-10 left-1/2 -translate-x-1/2 w-[700px] h-[350px] bg-gradient-to-b from-cyan-600/10 via-blue-600/5 to-transparent blur-3xl pointer-events-none -z-10" />
+        <div className="absolute top-6 left-1/2 -translate-x-1/2 w-[500px] max-w-full h-[220px] bg-gradient-to-b from-cyan-600/10 via-blue-600/5 to-transparent blur-3xl pointer-events-none -z-10" />
 
-        {/* 3D Visualizer Canvas */}
-        <section className="w-full max-w-4xl mx-auto pt-4 sm:pt-6 pb-2 px-4 flex flex-col items-center">
+        {/* 3D Visualizer Canvas - Compact on mobile */}
+        <section className="w-full max-w-3xl mx-auto pt-2 sm:pt-4 pb-1 px-2 sm:px-4 flex flex-col items-center">
           <TransferCanvas
             status={get3DStatus()}
             progress={progress?.percentage || 0}
@@ -516,7 +546,7 @@ export const UnifiedTransferPage: FC = () => {
         </section>
 
         {/* Interactive Transfer Stage */}
-        <section className="w-full max-w-xl mx-auto px-4 pb-16">
+        <section className="w-full max-w-xl mx-auto px-3.5 sm:px-4 pb-12 sm:pb-16">
           {/* Error Banner */}
           {errorMessage && (
             <ErrorMessage

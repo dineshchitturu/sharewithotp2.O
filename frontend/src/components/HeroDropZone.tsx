@@ -1,31 +1,31 @@
-import React, { useRef, useState } from 'react';
-import { UploadCloud, FileCheck, Zap } from 'lucide-react';
+import { useRef, useState, type FC, type DragEvent, type ChangeEvent, type KeyboardEvent } from 'react';
+import { UploadCloud, FileCheck, Zap, ArrowUpRight } from 'lucide-react';
 
 interface HeroDropZoneProps {
   onFileSelected: (file: File) => void;
   disabled?: boolean;
 }
 
-export const HeroDropZone: React.FC<HeroDropZoneProps> = ({
+export const HeroDropZone: FC<HeroDropZoneProps> = ({
   onFileSelected,
   disabled = false,
 }) => {
   const [isDragOver, setIsDragOver] = useState<boolean>(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleDragOver = (e: React.DragEvent) => {
+  const handleDragOver = (e: DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
     if (!disabled) setIsDragOver(true);
   };
 
-  const handleDragLeave = (e: React.DragEvent) => {
+  const handleDragLeave = (e: DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
     setIsDragOver(false);
   };
 
-  const handleDrop = (e: React.DragEvent) => {
+  const handleDrop = (e: DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
     setIsDragOver(false);
@@ -37,7 +37,7 @@ export const HeroDropZone: React.FC<HeroDropZoneProps> = ({
     }
   };
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleInputChange = (e: ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
       const file = e.target.files[0];
       onFileSelected(file);
@@ -56,15 +56,15 @@ export const HeroDropZone: React.FC<HeroDropZoneProps> = ({
       }}
       role="button"
       tabIndex={0}
-      onKeyDown={(e) => {
+      onKeyDown={(e: KeyboardEvent) => {
         if ((e.key === 'Enter' || e.key === ' ') && !disabled) {
           fileInputRef.current?.click();
         }
       }}
-      className={`group relative w-full rounded-2xl border-2 border-dashed p-8 sm:p-12 text-center cursor-pointer transition-all duration-300 backdrop-blur-xl focus:outline-none focus:ring-2 focus:ring-cyan-400/50 ${
+      className={`group relative w-full rounded-2xl border transition-all duration-200 cursor-pointer backdrop-blur-xl focus:outline-none focus:ring-2 focus:ring-cyan-500/30 p-5 sm:p-8 text-center ${
         isDragOver
-          ? 'border-cyan-400 bg-cyan-950/40 shadow-[0_0_40px_rgba(56,189,248,0.25)] scale-[1.01]'
-          : 'border-slate-800 hover:border-cyan-500/50 bg-slate-900/60 hover:bg-slate-900/80 shadow-2xl'
+          ? 'border-cyan-400 bg-cyan-950/30 shadow-[0_0_30px_rgba(56,189,248,0.2)]'
+          : 'border-slate-800/90 hover:border-slate-700 bg-slate-900/70 hover:bg-slate-900/90 shadow-2xl shadow-black/40'
       } ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
     >
       <input
@@ -75,36 +75,44 @@ export const HeroDropZone: React.FC<HeroDropZoneProps> = ({
         className="hidden"
       />
 
-      {/* Decorative ambient background glow */}
+      {/* Stripe-style subtle top gradient glow */}
       <div className="absolute inset-0 -z-10 rounded-2xl bg-gradient-to-b from-cyan-500/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
 
       {/* Center Icon */}
-      <div className="mx-auto w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-slate-800/80 border border-slate-700/80 flex items-center justify-center text-cyan-400 group-hover:text-white group-hover:bg-gradient-to-tr group-hover:from-cyan-500 group-hover:to-blue-600 group-hover:scale-110 shadow-xl group-hover:shadow-cyan-500/25 transition-all duration-300 mb-5">
+      <div className="mx-auto w-12 h-12 sm:w-14 sm:h-14 rounded-xl bg-slate-800/90 border border-slate-700/80 flex items-center justify-center text-cyan-400 group-hover:text-white group-hover:bg-cyan-600 transition-all duration-200 mb-3.5 shadow-md">
         {isDragOver ? (
-          <FileCheck className="w-8 h-8 sm:w-10 sm:h-10 text-cyan-300 animate-bounce" />
+          <FileCheck className="w-6 h-6 sm:w-7 sm:h-7 text-cyan-200 animate-bounce" />
         ) : (
-          <UploadCloud className="w-8 h-8 sm:w-10 sm:h-10 transition-transform group-hover:-translate-y-1" />
+          <UploadCloud className="w-6 h-6 sm:w-7 sm:h-7" />
         )}
       </div>
 
-      <div className="space-y-2">
-        <h3 className="text-lg sm:text-xl font-bold text-white tracking-tight group-hover:text-cyan-300 transition-colors">
-          {isDragOver ? 'Release to select file' : 'Drop your file here, or click to browse'}
+      <div className="space-y-1.5">
+        <h3 className="text-base sm:text-lg font-bold text-white tracking-tight group-hover:text-cyan-300 transition-colors">
+          {isDragOver ? 'Release to upload' : 'Choose a file or drop here'}
         </h3>
-        <p className="text-xs sm:text-sm text-slate-400 max-w-sm mx-auto font-light leading-relaxed">
-          Send large videos, archives, disk images, or documents directly to any device via encrypted P2P.
+        <p className="text-xs text-slate-400 max-w-sm mx-auto font-light leading-relaxed">
+          Stream files directly to any peer without server storage limits.
         </p>
       </div>
 
+      <div className="mt-4 flex items-center justify-center">
+        <span className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-slate-800/80 border border-slate-700/80 text-xs font-semibold text-slate-200 group-hover:border-cyan-500/40 group-hover:text-white transition-all shadow-sm">
+          <span>Select File</span>
+          <ArrowUpRight className="w-3.5 h-3.5 text-cyan-400" />
+        </span>
+      </div>
+
       {/* Trust Badges */}
-      <div className="mt-6 pt-5 border-t border-slate-800/80 flex flex-wrap items-center justify-center gap-2 sm:gap-4 text-[11px] font-mono text-slate-400">
-        <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-800/60 border border-slate-700/60">
+      <div className="mt-5 pt-4 border-t border-slate-800/70 flex flex-wrap items-center justify-center gap-2 sm:gap-4 text-[11px] font-mono text-slate-400">
+        <div className="flex items-center gap-1.5">
           <Zap className="w-3 h-3 text-cyan-400" />
-          <span>No File Size Limit</span>
+          <span>No Size Cap</span>
         </div>
-        <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-800/60 border border-slate-700/60">
-          <span className="w-2 h-2 rounded-full bg-emerald-400" />
-          <span>100% In-RAM P2P Stream</span>
+        <span className="text-slate-700">•</span>
+        <div className="flex items-center gap-1.5">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+          <span>Encrypted Direct P2P</span>
         </div>
       </div>
     </div>

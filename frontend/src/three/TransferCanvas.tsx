@@ -1,4 +1,4 @@
-import React, { Suspense, useEffect, useState, useRef } from 'react';
+import { Suspense, useEffect, useState, useRef, type FC } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { Float } from '@react-three/drei';
 import * as THREE from 'three';
@@ -35,7 +35,7 @@ function checkWebGL(): boolean {
 }
 
 // Scene with subtle mouse parallax
-const SceneContent: React.FC<{
+const SceneContent: FC<{
   status: TransferStatus3D;
   progress: number;
   speedBytesPerSec: number;
@@ -44,9 +44,8 @@ const SceneContent: React.FC<{
 
   useFrame((state) => {
     if (!sceneGroup.current) return;
-    // Parallax damping
-    const targetRotX = (state.pointer.y * Math.PI) / 36;
-    const targetRotY = (state.pointer.x * Math.PI) / 28;
+    const targetRotX = (state.pointer.y * Math.PI) / 40;
+    const targetRotY = (state.pointer.x * Math.PI) / 32;
     sceneGroup.current.rotation.x = THREE.MathUtils.damp(
       sceneGroup.current.rotation.x,
       targetRotX,
@@ -62,8 +61,8 @@ const SceneContent: React.FC<{
   });
 
   return (
-    <group ref={sceneGroup}>
-      <ambientLight intensity={0.8} />
+    <group ref={sceneGroup} scale={0.92}>
+      <ambientLight intensity={0.9} />
       <directionalLight position={[2, 6, 4]} intensity={1.5} color="#e0f2fe" />
       <pointLight position={[-2.2, 2.5, 1.5]} intensity={2.2} color="#38bdf8" />
       <pointLight
@@ -72,7 +71,7 @@ const SceneContent: React.FC<{
         color={status === 'completed' ? '#10b981' : '#38bdf8'}
       />
 
-      <Float speed={1.2} rotationIntensity={0.15} floatIntensity={0.3}>
+      <Float speed={1.2} rotationIntensity={0.15} floatIntensity={0.25}>
         <NetworkNodes status={status} />
         <ConnectionBeam status={status} />
         <FileCrystal status={status} progress={progress} />
@@ -83,20 +82,20 @@ const SceneContent: React.FC<{
 };
 
 // 2D Fallback for environments lacking WebGL
-const Fallback2D: React.FC<TransferCanvasProps> = ({ status, progress = 0 }) => {
+const Fallback2D: FC<TransferCanvasProps> = ({ status, progress = 0 }) => {
   return (
-    <div className="w-full h-full flex flex-col items-center justify-center p-6 text-center select-none">
-      <div className="relative w-64 h-32 flex items-center justify-between px-4">
+    <div className="w-full h-full flex flex-col items-center justify-center p-4 text-center select-none pointer-events-none">
+      <div className="relative w-64 h-24 flex items-center justify-between px-4">
         {/* Sender Node */}
-        <div className="flex flex-col items-center gap-2">
-          <div className="w-12 h-12 rounded-full border-2 border-cyan-400 bg-cyan-950/60 shadow-[0_0_20px_rgba(56,189,248,0.4)] flex items-center justify-center">
-            <div className="w-4 h-4 rounded-full bg-cyan-400 animate-pulse" />
+        <div className="flex flex-col items-center gap-1.5">
+          <div className="w-9 h-9 rounded-full border border-cyan-400/80 bg-cyan-950/60 shadow-[0_0_15px_rgba(56,189,248,0.3)] flex items-center justify-center">
+            <div className="w-3 h-3 rounded-full bg-cyan-400 animate-pulse" />
           </div>
-          <span className="text-xs font-mono text-cyan-300">Sender</span>
+          <span className="text-[10px] font-mono text-cyan-300">Sender</span>
         </div>
 
         {/* Dynamic Beam */}
-        <div className="flex-1 h-0.5 mx-3 relative bg-slate-700 overflow-hidden">
+        <div className="flex-1 h-0.5 mx-3 relative bg-slate-800 overflow-hidden">
           <div
             className={`absolute inset-0 bg-gradient-to-r from-cyan-400 via-sky-300 to-emerald-400 transition-all duration-300 ${
               status === 'transferring' ? 'animate-pulse' : ''
@@ -106,31 +105,31 @@ const Fallback2D: React.FC<TransferCanvasProps> = ({ status, progress = 0 }) => 
         </div>
 
         {/* Receiver Node */}
-        <div className="flex flex-col items-center gap-2">
+        <div className="flex flex-col items-center gap-1.5">
           <div
-            className={`w-12 h-12 rounded-full border-2 flex items-center justify-center transition-all ${
+            className={`w-9 h-9 rounded-full border flex items-center justify-center transition-all ${
               status === 'completed'
-                ? 'border-emerald-400 bg-emerald-950/60 shadow-[0_0_20px_rgba(16,185,129,0.5)]'
-                : 'border-slate-700 bg-slate-900/60'
+                ? 'border-emerald-400 bg-emerald-950/60 shadow-[0_0_15px_rgba(16,185,129,0.4)]'
+                : 'border-slate-800 bg-slate-900/60'
             }`}
           >
             <div
-              className={`w-4 h-4 rounded-full ${
+              className={`w-3 h-3 rounded-full ${
                 status === 'completed' ? 'bg-emerald-400' : 'bg-slate-600'
               }`}
             />
           </div>
-          <span className="text-xs font-mono text-slate-400">Receiver</span>
+          <span className="text-[10px] font-mono text-slate-400">Receiver</span>
         </div>
       </div>
-      <p className="text-xs text-slate-500 font-mono mt-2 uppercase tracking-wider">
+      <p className="text-[10px] text-slate-500 font-mono uppercase tracking-wider">
         P2P DataStream • Direct Browser Link
       </p>
     </div>
   );
 };
 
-export const TransferCanvas: React.FC<TransferCanvasProps> = ({
+export const TransferCanvas: FC<TransferCanvasProps> = ({
   status,
   progress = 0,
   speedBytesPerSec = 0,
@@ -147,10 +146,10 @@ export const TransferCanvas: React.FC<TransferCanvasProps> = ({
   }
 
   return (
-    <div className="relative w-full h-[280px] sm:h-[340px] md:h-[380px] select-none pointer-events-auto">
+    <div className="relative w-full h-32 sm:h-52 md:h-64 select-none pointer-events-none overflow-hidden">
       <Canvas
-        dpr={[1, 2]}
-        camera={{ position: [0, 0.4, 4.4], fov: 45 }}
+        dpr={[1, 1.75]}
+        camera={{ position: [0, 0.4, 4.2], fov: 46 }}
         gl={{ antialias: true, alpha: true, powerPreference: 'high-performance' }}
       >
         <Suspense fallback={null}>
@@ -162,22 +161,22 @@ export const TransferCanvas: React.FC<TransferCanvasProps> = ({
         </Suspense>
       </Canvas>
 
-      {/* Node labels overlay with modern cyber-minimal styling */}
-      <div className="absolute inset-x-0 bottom-2 px-8 flex justify-between items-center pointer-events-none text-[11px] font-mono tracking-wider uppercase text-slate-400">
-        <div className="flex items-center gap-1.5 bg-slate-900/70 border border-slate-800/80 px-2.5 py-1 rounded-full backdrop-blur-md">
-          <span className="w-2 h-2 rounded-full bg-cyan-400 animate-ping" />
-          <span>Local Peer</span>
+      {/* Micro node labels overlay with Stripe-style minimalism */}
+      <div className="absolute inset-x-0 bottom-1 px-4 sm:px-8 flex justify-between items-center pointer-events-none text-[10px] font-mono tracking-wider uppercase text-slate-400">
+        <div className="flex items-center gap-1 bg-slate-950/70 border border-slate-800/80 px-2 py-0.5 rounded-full backdrop-blur-md">
+          <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-ping" />
+          <span>Local</span>
         </div>
 
         {fileName && (
-          <div className="hidden sm:flex items-center gap-1.5 bg-slate-900/70 border border-cyan-500/20 px-3 py-1 rounded-full backdrop-blur-md text-cyan-300 truncate max-w-[200px]">
+          <div className="hidden sm:flex items-center gap-1.5 bg-slate-950/70 border border-cyan-500/20 px-2.5 py-0.5 rounded-full backdrop-blur-md text-cyan-300 truncate max-w-[180px]">
             <span className="truncate">{fileName}</span>
           </div>
         )}
 
-        <div className="flex items-center gap-1.5 bg-slate-900/70 border border-slate-800/80 px-2.5 py-1 rounded-full backdrop-blur-md">
+        <div className="flex items-center gap-1 bg-slate-950/70 border border-slate-800/80 px-2 py-0.5 rounded-full backdrop-blur-md">
           <span
-            className={`w-2 h-2 rounded-full ${
+            className={`w-1.5 h-1.5 rounded-full ${
               status === 'completed'
                 ? 'bg-emerald-400'
                 : status === 'transferring'
@@ -185,7 +184,7 @@ export const TransferCanvas: React.FC<TransferCanvasProps> = ({
                 : 'bg-slate-600'
             }`}
           />
-          <span>Remote Peer</span>
+          <span>Peer</span>
         </div>
       </div>
     </div>

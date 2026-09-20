@@ -220,12 +220,34 @@ export class FileSender {
   }
 
   private waitForBufferDrain(): Promise<void> {
+    if (!this.dataChannel || this.dataChannel.bufferedAmount <= LOW_WATER_MARK) {
+      return Promise.resolve();
+    }
     return new Promise((resolve) => {
-      const onBufferedAmountLow = () => {
-        this.dataChannel.removeEventListener('bufferedamountlow', onBufferedAmountLow);
-        resolve();
+      let isDone = false;
+
+      const cleanup = () => {
+        if (!isDone) {
+          isDone = true;
+          this.dataChannel.removeEventListener('bufferedamountlow', onBufferedAmountLow);
+          clearInterval(pollTimer);
+          clearTimeout(timeoutTimer);
+          resolve();
+        }
       };
+
+      const onBufferedAmountLow = () => cleanup();
       this.dataChannel.addEventListener('bufferedamountlow', onBufferedAmountLow);
+
+      const pollTimer = setInterval(() => {
+        if (!this.dataChannel || this.dataChannel.bufferedAmount <= LOW_WATER_MARK) {
+          cleanup();
+        }
+      }, 40);
+
+      const timeoutTimer = setTimeout(() => {
+        cleanup();
+      }, 5000);
     });
   }
 

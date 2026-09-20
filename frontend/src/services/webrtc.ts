@@ -30,8 +30,19 @@ export class WebRTCManager {
   public initialize(isInitiator: boolean): RTCPeerConnection {
     this.close();
 
-    const stunServer = this.config.stunUrl || import.meta.env.VITE_STUN_SERVER || 'stun:stun.l.google.com:19302';
-    const iceServers: RTCIceServer[] = [{ urls: stunServer }];
+    const defaultStunServers = [
+      'stun:stun.l.google.com:19302',
+      'stun:stun1.l.google.com:19302',
+      'stun:stun2.l.google.com:19302',
+      'stun:stun3.l.google.com:19302',
+      'stun:stun4.l.google.com:19302',
+      'stun:stun.cloudflare.com:3478',
+      'stun:openrelay.metered.ca:80',
+    ];
+
+    const customStun = this.config.stunUrl || import.meta.env.VITE_STUN_SERVER;
+    const stunList = customStun ? [customStun, ...defaultStunServers] : defaultStunServers;
+    const iceServers: RTCIceServer[] = [{ urls: stunList }];
 
     const turnServer = this.config.turnUrl || import.meta.env.VITE_TURN_SERVER;
     if (turnServer) {
@@ -42,7 +53,10 @@ export class WebRTCManager {
       });
     }
 
-    this.pc = new RTCPeerConnection({ iceServers });
+    this.pc = new RTCPeerConnection({
+      iceServers,
+      iceCandidatePoolSize: 10,
+    });
     this.hasRemoteDescription = false;
     this.pendingIceCandidates = [];
 
@@ -54,7 +68,19 @@ export class WebRTCManager {
 
     this.pc.onconnectionstatechange = () => {
       if (this.pc) {
+        console.info('[WebRTC] Connection state changed:', this.pc.connectionState);
         this.onConnectionStateChange(this.pc.connectionState);
+      }
+    };
+
+    this.pc.oniceconnectionstatechange = () => {
+      if (this.pc) {
+        console.info('[WebRTC] ICE connection state:', this.pc.iceConnectionState);
+        if (this.pc.iceConnectionState === 'failed') {
+          try {
+            this.pc.restartIce();
+          } catch {}
+        }
       }
     };
 
