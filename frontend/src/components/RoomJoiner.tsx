@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { ArrowRight, KeyRound, ShieldCheck } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Lock, KeyRound, ShieldCheck } from 'lucide-react';
 
 interface RoomJoinerProps {
   onJoin: (otp: string) => Promise<void>;
@@ -16,12 +16,21 @@ export const RoomJoiner: React.FC<RoomJoinerProps> = ({
 }) => {
   const [otp, setOtp] = useState(initialOtp);
   const [validationError, setValidationError] = useState<string | null>(null);
+  const isSubmittingRef = useRef<boolean>(false);
 
   useEffect(() => {
     if (initialOtp && initialOtp.length === 6) {
       setOtp(initialOtp);
     }
   }, [initialOtp]);
+
+  const doJoin = (code: string) => {
+    if (isSubmittingRef.current || isLoading) return;
+    isSubmittingRef.current = true;
+    onJoin(code).finally(() => {
+      isSubmittingRef.current = false;
+    });
+  };
 
   const handleSubmit = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -33,7 +42,7 @@ export const RoomJoiner: React.FC<RoomJoinerProps> = ({
     }
 
     setValidationError(null);
-    onJoin(cleanOtp);
+    doJoin(cleanOtp);
   };
 
   const handleOtpChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -44,7 +53,7 @@ export const RoomJoiner: React.FC<RoomJoinerProps> = ({
     // Auto-submit when user finishes entering 6 digits
     if (rawVal.length === 6 && !isLoading) {
       setTimeout(() => {
-        onJoin(rawVal);
+        doJoin(rawVal);
       }, 100);
     }
   };
@@ -57,21 +66,23 @@ export const RoomJoiner: React.FC<RoomJoinerProps> = ({
       setValidationError(null);
       if (pasted.length === 6 && !isLoading) {
         setTimeout(() => {
-          onJoin(pasted);
+          doJoin(pasted);
         }, 100);
       }
     }
   };
 
   return (
-    <div className="w-full max-w-md mx-auto bg-slate-900/90 border border-slate-800/90 rounded-2xl p-6 md:p-8 shadow-2xl backdrop-blur-sm">
+    <div className="w-full max-w-md mx-auto bg-slate-900/90 border border-slate-800/90 rounded-3xl p-6 md:p-8 shadow-2xl backdrop-blur-sm">
       <div className="text-center mb-6">
         <div className="w-12 h-12 rounded-2xl bg-sky-950/80 border border-sky-500/30 text-sky-400 flex items-center justify-center mx-auto mb-3">
           <KeyRound className="w-6 h-6" />
         </div>
-        <h2 className="text-2xl font-bold tracking-tight text-white mb-2">Receive File</h2>
-        <p className="text-sm text-slate-400 max-w-sm mx-auto">
-          Enter the 6-digit one-time password shared by the sender to connect and download.
+        <h2 className="text-2xl font-bold tracking-tight text-white mb-2 font-sans">
+          Enter the 6-digit OTP
+        </h2>
+        <p className="text-sm text-slate-400 max-w-sm mx-auto leading-relaxed">
+          Enter the code from your other device to retrieve the content
         </p>
       </div>
 
@@ -111,14 +122,14 @@ export const RoomJoiner: React.FC<RoomJoinerProps> = ({
         <button
           type="submit"
           disabled={isLoading || otp.length !== 6}
-          className="w-full mt-2 flex items-center justify-center gap-2 py-4 px-6 rounded-xl font-semibold text-white bg-sky-600 hover:bg-sky-500 active:bg-sky-700 disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-lg shadow-sky-600/20 text-sm"
+          className="w-full mt-2 flex items-center justify-center gap-2 py-4 px-6 rounded-2xl font-semibold text-white bg-sky-600 hover:bg-sky-500 active:bg-sky-700 disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-lg shadow-sky-600/20 text-sm cursor-pointer"
         >
           {isLoading ? (
             <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
           ) : (
             <>
-              <span>Connect & Receive File</span>
-              <ArrowRight className="w-4 h-4" />
+              <Lock className="w-4 h-4" />
+              <span>Unlock Share</span>
             </>
           )}
         </button>

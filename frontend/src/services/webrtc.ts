@@ -30,30 +30,15 @@ export class WebRTCManager {
   public initialize(isInitiator: boolean): RTCPeerConnection {
     this.close();
 
-    const defaultStunServers = [
-      'stun:stun.l.google.com:19302',
-      'stun:stun1.l.google.com:19302',
-      'stun:stun2.l.google.com:19302',
-      'stun:stun3.l.google.com:19302',
-      'stun:stun4.l.google.com:19302',
-      'stun:stun.cloudflare.com:3478',
-      'stun:openrelay.metered.ca:80',
-    ];
-
-    const customStun = this.config.stunUrl || import.meta.env.VITE_STUN_SERVER;
-    const stunList = customStun ? [customStun, ...defaultStunServers] : defaultStunServers;
-    const iceServers: RTCIceServer[] = [{ urls: stunList }];
-
-    // Metered OpenRelay free TURN relay pool for symmetric NAT / mobile network traversal
-    const defaultTurnServers: RTCIceServer[] = [
+    const stunServer = this.config.stunUrl || import.meta.env.VITE_STUN_SERVER || 'stun:stun.l.google.com:19302';
+    const iceServers: RTCIceServer[] = [
       {
         urls: [
-          'turn:openrelay.metered.ca:80',
-          'turn:openrelay.metered.ca:443',
-          'turn:openrelay.metered.ca:443?transport=tcp',
+          stunServer,
+          'stun:stun1.l.google.com:19302',
+          'stun:stun2.l.google.com:19302',
+          'stun:stun.cloudflare.com:3478',
         ],
-        username: 'openrelayproject',
-        credential: 'openrelayproject',
       },
     ];
 
@@ -64,14 +49,9 @@ export class WebRTCManager {
         username: this.config.turnUsername || import.meta.env.VITE_TURN_USERNAME,
         credential: this.config.turnCredential || import.meta.env.VITE_TURN_CREDENTIAL,
       });
-    } else {
-      iceServers.push(...defaultTurnServers);
     }
 
-    this.pc = new RTCPeerConnection({
-      iceServers,
-      iceCandidatePoolSize: 10,
-    });
+    this.pc = new RTCPeerConnection({ iceServers });
     this.hasRemoteDescription = false;
     this.pendingIceCandidates = [];
 

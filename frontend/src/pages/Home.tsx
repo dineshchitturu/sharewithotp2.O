@@ -8,20 +8,17 @@ interface HomeProps {
 export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
   return (
     <div className="w-full max-w-4xl mx-auto px-4 py-8 md:py-16">
-      {/* Hero Header */}
-      <div className="text-center mb-12 md:mb-16">
-        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-sky-500/30 bg-sky-950/40 text-sky-400 text-xs font-semibold uppercase tracking-wider mb-4">
+      {/* Hero Header matching reference image typography */}
+      <div className="text-center mb-10 md:mb-14">
+        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-sky-500/30 bg-sky-950/40 text-sky-400 text-xs font-semibold uppercase tracking-wider mb-5">
           <ShieldCheck className="w-3.5 h-3.5" />
           <span>Zero Server Storage</span>
         </div>
-        <h1 className="text-3xl sm:text-5xl font-black tracking-tight text-white mb-4">
-          P2P FILE TRANSFER
+        <h1 className="text-4xl sm:text-5xl md:text-6xl font-extrabold tracking-tight text-white mb-4 max-w-2xl mx-auto leading-[1.12] font-sans">
+          Share Text or Files<br className="hidden sm:inline" /> Between Devices Instantly
         </h1>
-        <p className="text-lg sm:text-xl text-slate-400 max-w-xl mx-auto font-light">
-          Fast. Private. Temporary.
-        </p>
-        <p className="text-sm text-slate-500 max-w-md mx-auto mt-2">
-          Share files larger than 100 MB directly between browser peers using WebRTC DataChannels.
+        <p className="text-base sm:text-lg text-slate-400 max-w-xl mx-auto font-normal leading-relaxed">
+          Generate a secure one-time password to transfer text or files across devices. No login. No accounts.
         </p>
       </div>
 

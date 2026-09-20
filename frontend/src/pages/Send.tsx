@@ -122,7 +122,7 @@ export const Send: React.FC<SendProps> = ({ onBack }) => {
       signaling.onMessage(async (msg) => {
         console.info('[Sender Signaling Rx]:', msg.type);
 
-        if (msg.type === 'peer-joined') {
+        if (msg.type === 'peer-joined' || msg.type === 'request-offer') {
           setTransferState('SIGNALING');
           try {
             const offer = await webrtc.createOffer();

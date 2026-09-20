@@ -32,6 +32,7 @@ export const Receive: React.FC<ReceiveProps> = ({ onBack }) => {
   const webrtcRef = useRef<WebRTCManager | null>(null);
   const fileReceiverRef = useRef<FileReceiver | null>(null);
   const isCompletedRef = useRef<boolean>(false);
+  const isJoiningRef = useRef<boolean>(false);
 
   useEffect(() => {
     // Read ?otp= or ?code= from URL parameters if present
@@ -47,6 +48,7 @@ export const Receive: React.FC<ReceiveProps> = ({ onBack }) => {
   }, []);
 
   const cleanupTransfer = () => {
+    isJoiningRef.current = false;
     if (fileReceiverRef.current) {
       fileReceiverRef.current.cancel();
       fileReceiverRef.current = null;
@@ -63,10 +65,15 @@ export const Receive: React.FC<ReceiveProps> = ({ onBack }) => {
 
   const handleJoin = async (enteredOtp: string) => {
     const cleanOtp = enteredOtp.trim();
+    if (isJoiningRef.current) return;
+    isJoiningRef.current = true;
+
     setIsLoading(true);
     setErrorMessage(null);
     isCompletedRef.current = false;
     setOtp(cleanOtp);
+
+    let offerTimeout: any = null;
 
     try {
       const verifyResp = await verifyOTP(cleanOtp);
@@ -75,6 +82,7 @@ export const Receive: React.FC<ReceiveProps> = ({ onBack }) => {
         setAttemptsRemaining(verifyResp.attempts_remaining);
         setErrorMessage(verifyResp.message || 'OTP verification failed.');
         setIsLoading(false);
+        isJoiningRef.current = false;
         return;
       }
 
@@ -116,6 +124,10 @@ export const Receive: React.FC<ReceiveProps> = ({ onBack }) => {
           };
 
           const receiver = new FileReceiver(dataChannel, {
+            onMetadata: (meta) => {
+              setFileName(meta.name);
+              setFileSize(meta.size);
+            },
             onProgress: (prog) => {
               setProgress(prog);
               if (prog.totalBytes && !fileSize) {
@@ -154,6 +166,7 @@ export const Receive: React.FC<ReceiveProps> = ({ onBack }) => {
         console.info('[Receiver Signaling Rx]:', msg.type);
 
         if (msg.type === 'offer') {
+          if (offerTimeout) clearTimeout(offerTimeout);
           setTransferState('CONNECTING');
           try {
             const answer = await webrtc.handleOffer(msg.payload);
@@ -166,12 +179,14 @@ export const Receive: React.FC<ReceiveProps> = ({ onBack }) => {
             await webrtc.addIceCandidate(msg.payload);
           }
         } else if (msg.type === 'transfer-complete') {
+          if (offerTimeout) clearTimeout(offerTimeout);
           isCompletedRef.current = true;
           setErrorMessage(null);
           setTransferState('COMPLETED');
           setStep('completed');
           // Gracefully maintain connection
         } else if (msg.type === 'transfer-cancelled') {
+          if (offerTimeout) clearTimeout(offerTimeout);
           if (!isCompletedRef.current) {
             setTransferState('CANCELLED');
             setErrorMessage(`Transfer cancelled by peer: ${msg.reason || ''}`);
@@ -190,10 +205,17 @@ export const Receive: React.FC<ReceiveProps> = ({ onBack }) => {
       });
 
       await signaling.connect();
+
+      offerTimeout = setTimeout(() => {
+        if (!isCompletedRef.current && (transferState === 'RECEIVER_AUTHENTICATED' || transferState === 'SIGNALING')) {
+          signaling.sendRequestOffer();
+        }
+      }, 3500);
     } catch (err: any) {
       setErrorMessage(err.message || 'Verification or connection failed.');
     } finally {
       setIsLoading(false);
+      isJoiningRef.current = false;
     }
   };
 
