@@ -151,8 +151,8 @@ async def websocket_signaling_endpoint(
                         pass
                 continue
 
-            # WebRTC signaling relay: offer, answer, ice-candidate
-            if msg_type in ("offer", "answer", "ice-candidate"):
+            # WebRTC signaling relay: offer, answer, ice-candidate, request-offer
+            if msg_type in ("offer", "answer", "ice-candidate", "request-offer"):
                 peer_ws = await room_manager.get_peer_connection(clean_room_id, role)
                 if peer_ws:
                     # Append sender metadata and relay to peer

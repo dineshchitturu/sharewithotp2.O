@@ -7,6 +7,7 @@ export const HIGH_WATER_MARK = 1024 * 1024; // 1 MB backpressure threshold (tigh
 export const LOW_WATER_MARK = 256 * 1024; // 256 KB resume threshold
 
 export interface TransferCallbacks {
+  onMetadata?: (metadata: FileMetadata) => void;
   onProgress: (progress: TransferProgress) => void;
   onComplete: (fileUrl?: string, hashVerified?: boolean, computedHash?: string) => void;
   onError: (error: string) => void;
@@ -369,6 +370,8 @@ export class FileReceiver {
     } catch (e) {
       console.warn('[FileReceiver] Failed to initialize WASM SHA-256 hasher:', e);
     }
+
+    this.callbacks.onMetadata?.(meta);
 
     this.callbacks.onProgress({
       bytesTransferred: 0,

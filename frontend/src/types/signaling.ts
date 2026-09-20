@@ -10,6 +10,7 @@ export type SignalingMessageType =
   | 'state-update'
   | 'transfer-complete'
   | 'transfer-cancelled'
+  | 'request-offer'
   | 'ping'
   | 'pong'
   | 'error';

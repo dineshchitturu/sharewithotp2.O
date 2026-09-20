@@ -67,6 +67,7 @@ export const UnifiedTransferPage: FC = () => {
   const isCompletedRef = useRef<boolean>(false);
   const isStreamingRef = useRef<boolean>(false);
   const selectedFileRef = useRef<File | null>(null);
+  const isJoiningRef = useRef<boolean>(false);
 
   // Read URL parameters on mount
   useEffect(() => {
@@ -83,6 +84,7 @@ export const UnifiedTransferPage: FC = () => {
   }, []);
 
   const cleanupNetwork = () => {
+    isJoiningRef.current = false;
     isStreamingRef.current = false;
     if (fileSenderRef.current) {
       fileSenderRef.current.cancel();
@@ -210,7 +212,7 @@ export const UnifiedTransferPage: FC = () => {
 
       signaling.onMessage(async (msg) => {
         console.info('[Sender Signaling Rx]:', msg.type);
-        if (msg.type === 'peer-joined') {
+        if (msg.type === 'peer-joined' || msg.type === 'request-offer') {
           setTransferState('SIGNALING');
           try {
             const offer = await webrtc.createOffer();
@@ -316,10 +318,18 @@ export const UnifiedTransferPage: FC = () => {
 
   // RECEIVER FLOW: Join with OTP
   const handleJoinWithOtp = async (cleanOtp: string) => {
+    if (isJoiningRef.current) {
+      console.warn('[Receiver] Join already in progress, ignoring duplicate call.');
+      return;
+    }
+    isJoiningRef.current = true;
+
     setIsLoading(true);
     setErrorMessage(null);
     isCompletedRef.current = false;
     setReceiverOtp(cleanOtp);
+
+    let offerFallbackTimeout: number | null = null;
 
     try {
       const verifyResp = await verifyOTP(cleanOtp);
@@ -327,6 +337,7 @@ export const UnifiedTransferPage: FC = () => {
         setAttemptsRemaining(verifyResp.attempts_remaining);
         setErrorMessage(verifyResp.message || 'OTP verification failed.');
         setIsLoading(false);
+        isJoiningRef.current = false;
         return;
       }
 
@@ -370,6 +381,11 @@ export const UnifiedTransferPage: FC = () => {
           };
 
           const receiver = new FileReceiver(dataChannel, {
+            onMetadata: (meta) => {
+              console.info('[Receiver] Metadata received:', meta.name, meta.size);
+              setReceivingFileName(meta.name);
+              setReceivingFileSize(meta.size);
+            },
             onProgress: (prog) => {
               setProgress(prog);
               if (prog.totalBytes && !receivingFileSize) {
@@ -407,6 +423,10 @@ export const UnifiedTransferPage: FC = () => {
       signaling.onMessage(async (msg) => {
         console.info('[Receiver Signaling Rx]:', msg.type);
         if (msg.type === 'offer') {
+          if (offerFallbackTimeout !== null) {
+            clearTimeout(offerFallbackTimeout);
+            offerFallbackTimeout = null;
+          }
           setTransferState('CONNECTING');
           try {
             const answer = await webrtc.handleOffer(msg.payload);
@@ -419,11 +439,13 @@ export const UnifiedTransferPage: FC = () => {
             await webrtc.addIceCandidate(msg.payload);
           }
         } else if (msg.type === 'transfer-complete') {
+          if (offerFallbackTimeout !== null) clearTimeout(offerFallbackTimeout);
           isCompletedRef.current = true;
           setErrorMessage(null);
           setTransferState('COMPLETED');
           setReceiverStep('completed');
         } else if (msg.type === 'transfer-cancelled') {
+          if (offerFallbackTimeout !== null) clearTimeout(offerFallbackTimeout);
           if (!isCompletedRef.current) {
             setTransferState('CANCELLED');
             setErrorMessage(`Transfer cancelled by peer: ${msg.reason || ''}`);
@@ -454,10 +476,20 @@ export const UnifiedTransferPage: FC = () => {
       });
 
       await signaling.connect();
+
+      // Offer request fallback if sender is waiting but offer handshake was delayed
+      offerFallbackTimeout = window.setTimeout(() => {
+        if (!isCompletedRef.current && (transferState === 'RECEIVER_AUTHENTICATED' || transferState === 'SIGNALING')) {
+          console.info('[Receiver] Handshake waiting, requesting offer fallback...');
+          signaling.sendRequestOffer();
+        }
+      }, 3500);
     } catch (err: any) {
+      if (offerFallbackTimeout !== null) clearTimeout(offerFallbackTimeout);
       setErrorMessage(err.message || 'Verification or connection failed.');
     } finally {
       setIsLoading(false);
+      isJoiningRef.current = false;
     }
   };
 
@@ -532,8 +564,12 @@ export const UnifiedTransferPage: FC = () => {
 
       {/* Main Single-Page Hero & Interactive Workspace */}
       <main className="flex-1 flex flex-col items-center justify-start relative w-full">
-        {/* Ambient background glows */}
-        <div className="absolute top-6 left-1/2 -translate-x-1/2 w-[500px] max-w-full h-[220px] bg-gradient-to-b from-cyan-600/10 via-blue-600/5 to-transparent blur-3xl pointer-events-none -z-10" />
+        {/* Anti-Gravity Theme: Sleek neon cyan and purple ambient background glows */}
+        <div className="absolute top-2 left-1/2 -translate-x-1/2 w-[700px] max-w-full h-[300px] bg-gradient-to-b from-cyan-500/15 via-purple-600/10 to-transparent blur-3xl pointer-events-none -z-10 animate-pulse-glow" />
+        <div className="absolute top-16 left-1/4 -translate-x-1/2 w-[380px] h-[280px] bg-cyan-500/10 rounded-full blur-[100px] pointer-events-none -z-10 animate-float-slow" />
+        <div className="absolute top-24 right-1/4 translate-x-1/2 w-[400px] h-[300px] bg-purple-600/10 rounded-full blur-[110px] pointer-events-none -z-10 animate-pulse-glow" />
+        <div className="absolute top-36 left-8 w-1.5 h-1.5 rounded-full bg-cyan-400/50 blur-[0.5px] animate-float pointer-events-none -z-10" />
+        <div className="absolute top-64 right-10 w-2 h-2 rounded-full bg-purple-400/50 blur-[0.5px] animate-float-slow pointer-events-none -z-10" />
 
         {/* 3D Visualizer Canvas - Compact on mobile */}
         <section className="w-full max-w-3xl mx-auto pt-2 sm:pt-4 pb-1 px-2 sm:px-4 flex flex-col items-center">
@@ -623,6 +659,7 @@ export const UnifiedTransferPage: FC = () => {
                   isLoading={isLoading}
                   attemptsRemaining={attemptsRemaining}
                   initialOtp={receiverInitialOtp}
+                  onSelectMode={handleSelectMode}
                 />
               )}
 

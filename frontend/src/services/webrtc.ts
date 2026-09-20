@@ -44,6 +44,19 @@ export class WebRTCManager {
     const stunList = customStun ? [customStun, ...defaultStunServers] : defaultStunServers;
     const iceServers: RTCIceServer[] = [{ urls: stunList }];
 
+    // Metered OpenRelay free TURN relay pool for symmetric NAT / mobile network traversal
+    const defaultTurnServers: RTCIceServer[] = [
+      {
+        urls: [
+          'turn:openrelay.metered.ca:80',
+          'turn:openrelay.metered.ca:443',
+          'turn:openrelay.metered.ca:443?transport=tcp',
+        ],
+        username: 'openrelayproject',
+        credential: 'openrelayproject',
+      },
+    ];
+
     const turnServer = this.config.turnUrl || import.meta.env.VITE_TURN_SERVER;
     if (turnServer) {
       iceServers.push({
@@ -51,6 +64,8 @@ export class WebRTCManager {
         username: this.config.turnUsername || import.meta.env.VITE_TURN_USERNAME,
         credential: this.config.turnCredential || import.meta.env.VITE_TURN_CREDENTIAL,
       });
+    } else {
+      iceServers.push(...defaultTurnServers);
     }
 
     this.pc = new RTCPeerConnection({
@@ -135,7 +150,8 @@ export class WebRTCManager {
       return;
     }
     try {
-      await this.pc.addIceCandidate(new RTCIceCandidate(candidate));
+      if (!candidate || (!candidate.candidate && candidate.candidate !== '')) return;
+      await this.pc.addIceCandidate(candidate);
     } catch (err) {
       console.warn('[WebRTC] Failed to add ICE candidate:', err);
     }
@@ -147,7 +163,8 @@ export class WebRTCManager {
       const candidate = this.pendingIceCandidates.shift();
       if (candidate) {
         try {
-          await this.pc.addIceCandidate(new RTCIceCandidate(candidate));
+          if (!candidate.candidate && candidate.candidate !== '') continue;
+          await this.pc.addIceCandidate(candidate);
         } catch (err) {
           console.warn('[WebRTC] Error processing pending candidate:', err);
         }

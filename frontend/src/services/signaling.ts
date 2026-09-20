@@ -8,6 +8,9 @@ export class SignalingClient {
   private ws: WebSocket | null = null;
   private handlers: Set<SignalingEventHandler> = new Set();
   private heartbeatInterval: number | null = null;
+  private reconnectTimer: number | null = null;
+  private reconnectAttempts: number = 0;
+  private maxReconnectAttempts: number = 5;
   private isIntentionallyClosed: boolean = false;
   private roomId: string;
   private role: 'sender' | 'receiver';
@@ -50,6 +53,7 @@ export class SignalingClient {
       }
 
       this.ws.onopen = () => {
+        this.reconnectAttempts = 0;
         this.startHeartbeat();
         resolve();
       };
@@ -61,10 +65,25 @@ export class SignalingClient {
       this.ws.onclose = (event) => {
         this.stopHeartbeat();
         if (!this.isIntentionallyClosed) {
-          this.emit({
-            type: 'error',
-            message: event.reason || `WebSocket closed (code: ${event.code})`,
-          });
+          if (this.reconnectAttempts < this.maxReconnectAttempts) {
+            const delay = Math.min(1000 * Math.pow(1.5, this.reconnectAttempts), 5000);
+            this.reconnectAttempts++;
+            console.warn(
+              `[Signaling] WebSocket closed unexpectedly. Reconnecting attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts} in ${delay}ms...`
+            );
+            this.reconnectTimer = window.setTimeout(() => {
+              if (!this.isIntentionallyClosed) {
+                this.connect().catch((err) => {
+                  console.warn('[Signaling] Reconnect failed:', err);
+                });
+              }
+            }, delay);
+          } else {
+            this.emit({
+              type: 'error',
+              message: event.reason || `WebSocket closed (code: ${event.code})`,
+            });
+          }
         }
       };
 
@@ -94,6 +113,10 @@ export class SignalingClient {
     }
   }
 
+  public isConnected(): boolean {
+    return this.ws !== null && this.ws.readyState === WebSocket.OPEN;
+  }
+
   public sendMessage(msg: SignalingMessage) {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify(msg));
@@ -114,6 +137,10 @@ export class SignalingClient {
     this.sendMessage({ type: 'ice-candidate', payload: candidate });
   }
 
+  public sendRequestOffer() {
+    this.sendMessage({ type: 'request-offer' });
+  }
+
   public sendStateUpdate(state: TransferState) {
     this.sendMessage({ type: 'state-update', state });
   }
@@ -128,11 +155,12 @@ export class SignalingClient {
 
   private startHeartbeat() {
     this.stopHeartbeat();
+    // 12-second heartbeat to safely prevent Render's ~55s idle timeout
     this.heartbeatInterval = window.setInterval(() => {
       if (this.ws && this.ws.readyState === WebSocket.OPEN) {
         this.ws.send(JSON.stringify({ type: 'ping' }));
       }
-    }, 20000);
+    }, 12000);
   }
 
   private stopHeartbeat() {
@@ -145,6 +173,10 @@ export class SignalingClient {
   public close() {
     this.isIntentionallyClosed = true;
     this.stopHeartbeat();
+    if (this.reconnectTimer !== null) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
     if (this.ws) {
       this.ws.close();
       this.ws = null;
