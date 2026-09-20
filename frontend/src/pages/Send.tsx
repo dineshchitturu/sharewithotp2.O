@@ -190,7 +190,7 @@ export const Send: React.FC<SendProps> = ({ onBack }) => {
           setErrorMessage(null);
           setTransferState('COMPLETED');
           setStep('completed');
-          cleanupTransfer();
+          // Gracefully maintain connection until user resets or navigates away
         } else if (msg.type === 'transfer-cancelled') {
           if (!isCompletedRef.current) {
             setTransferState('CANCELLED');
@@ -232,17 +232,12 @@ export const Send: React.FC<SendProps> = ({ onBack }) => {
       onProgress: (prog) => {
         setProgress(prog);
       },
-      onComplete: (_url, verified, hash) => {
+      onComplete: (_url, _verified, hash) => {
         setComputedHash(hash || '');
-        if (verified) {
-          isCompletedRef.current = true;
-          setErrorMessage(null);
-          setTransferState('COMPLETED');
-          setStep('completed');
-          // Gracefully maintain connection on success screen so receiver download can finalize
-        } else {
-          setTransferState('VERIFYING');
-        }
+        isCompletedRef.current = true;
+        setErrorMessage(null);
+        setTransferState('COMPLETED');
+        setStep('completed');
       },
       onError: (err) => {
         if (!isCompletedRef.current) {

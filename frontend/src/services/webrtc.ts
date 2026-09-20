@@ -37,9 +37,6 @@ export class WebRTCManager {
           stunServer,
           'stun:stun1.l.google.com:19302',
           'stun:stun2.l.google.com:19302',
-          'stun:stun3.l.google.com:19302',
-          'stun:stun4.l.google.com:19302',
-          'stun:stun.cloudflare.com:3478',
         ],
       },
     ];
@@ -50,17 +47,6 @@ export class WebRTCManager {
         urls: turnServer,
         username: this.config.turnUsername || import.meta.env.VITE_TURN_USERNAME,
         credential: this.config.turnCredential || import.meta.env.VITE_TURN_CREDENTIAL,
-      });
-    } else {
-      // Default community TURN relay fallback to guarantee connectivity across cellular / symmetric NATs
-      iceServers.push({
-        urls: [
-          'turn:openrelay.metered.ca:80',
-          'turn:openrelay.metered.ca:443',
-          'turn:openrelay.metered.ca:443?transport=tcp',
-        ],
-        username: 'openrelayproject',
-        credential: 'openrelayproject',
       });
     }
 
@@ -78,17 +64,6 @@ export class WebRTCManager {
       if (this.pc) {
         console.info('[WebRTC] Connection state changed:', this.pc.connectionState);
         this.onConnectionStateChange(this.pc.connectionState);
-      }
-    };
-
-    this.pc.oniceconnectionstatechange = () => {
-      if (this.pc) {
-        console.info('[WebRTC] ICE connection state:', this.pc.iceConnectionState);
-        if (this.pc.iceConnectionState === 'failed') {
-          try {
-            this.pc.restartIce();
-          } catch {}
-        }
       }
     };
 
@@ -161,7 +136,7 @@ export class WebRTCManager {
     }
     try {
       if (!candidate || (!candidate.candidate && candidate.candidate !== '')) return;
-      await this.pc.addIceCandidate(candidate);
+      await this.pc.addIceCandidate(new RTCIceCandidate(candidate));
     } catch (err) {
       console.warn('[WebRTC] Failed to add ICE candidate:', err);
     }
@@ -174,7 +149,7 @@ export class WebRTCManager {
       if (candidate) {
         try {
           if (!candidate.candidate && candidate.candidate !== '') continue;
-          await this.pc.addIceCandidate(candidate);
+          await this.pc.addIceCandidate(new RTCIceCandidate(candidate));
         } catch (err) {
           console.warn('[WebRTC] Error processing pending candidate:', err);
         }

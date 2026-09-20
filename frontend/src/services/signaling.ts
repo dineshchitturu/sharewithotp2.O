@@ -64,26 +64,28 @@ export class SignalingClient {
 
       this.ws.onclose = (event) => {
         this.stopHeartbeat();
-        if (!this.isIntentionallyClosed) {
-          if (this.reconnectAttempts < this.maxReconnectAttempts) {
-            const delay = Math.min(1000 * Math.pow(1.5, this.reconnectAttempts), 5000);
-            this.reconnectAttempts++;
-            console.warn(
-              `[Signaling] WebSocket closed unexpectedly. Reconnecting attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts} in ${delay}ms...`
-            );
-            this.reconnectTimer = window.setTimeout(() => {
-              if (!this.isIntentionallyClosed) {
-                this.connect().catch((err) => {
-                  console.warn('[Signaling] Reconnect failed:', err);
-                });
-              }
-            }, delay);
-          } else {
-            this.emit({
-              type: 'error',
-              message: event.reason || `WebSocket closed (code: ${event.code})`,
-            });
-          }
+        if (event.code === 1000 || this.isIntentionallyClosed) {
+          console.info('[Signaling] WebSocket closed cleanly:', event.reason);
+          return;
+        }
+        if (this.reconnectAttempts < this.maxReconnectAttempts) {
+          const delay = Math.min(1000 * Math.pow(1.5, this.reconnectAttempts), 5000);
+          this.reconnectAttempts++;
+          console.warn(
+            `[Signaling] WebSocket closed unexpectedly. Reconnecting attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts} in ${delay}ms...`
+          );
+          this.reconnectTimer = window.setTimeout(() => {
+            if (!this.isIntentionallyClosed) {
+              this.connect().catch((err) => {
+                console.warn('[Signaling] Reconnect failed:', err);
+              });
+            }
+          }, delay);
+        } else {
+          this.emit({
+            type: 'error',
+            message: event.reason || `WebSocket closed (code: ${event.code})`,
+          });
         }
       };
 
