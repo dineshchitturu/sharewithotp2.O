@@ -71,12 +71,8 @@ export const About: React.FC<AboutProps> = ({ onBack, onNavigate }) => {
               </div>
             </div>
 
-            <p className="text-sm text-slate-300 leading-relaxed mb-5">
-              Passionate about building high-performance, privacy-centric distributed systems. Designed and developed <strong>ShareWithOTP2.O</strong> to eliminate reliance on centralized third-party cloud storage, ensuring that personal and sensitive files stream directly between peer browsers with zero server retention.
-            </p>
-
             {/* Contact & Social Links */}
-            <div className="flex flex-wrap items-center justify-center sm:justify-start gap-3">
+            <div className="flex flex-wrap items-center justify-center sm:justify-start gap-3 mt-4">
               <a
                 href="mailto:dineshchitturu2005@gmail.com"
                 className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-slate-950/80 hover:bg-slate-800 border border-slate-800 hover:border-sky-500/50 text-slate-200 text-xs font-medium transition-all"

@@ -251,57 +251,9 @@ export function App() {
       {/* ======================================================== */}
       {/* FOOTER                                                   */}
       {/* ======================================================== */}
-      <footer className="border-t border-slate-900 py-8 bg-slate-950/60 text-xs text-slate-500">
-        <div className="max-w-6xl mx-auto px-4 flex flex-col gap-6">
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-            <div className="flex items-center gap-2">
-              <span className="font-bold text-slate-200">ShareWithOTP</span>
-              <span className="text-slate-600">•</span>
-              <span className="text-slate-400">Direct Browser-to-Browser P2P Transfer</span>
-            </div>
-
-            {/* Quick Links with Smooth Scrolling */}
-            <div className="flex flex-wrap items-center justify-center gap-4 text-xs font-medium">
-              <button
-                onClick={() => scrollToSection('home')}
-                className="text-slate-400 hover:text-sky-400 transition-colors cursor-pointer"
-              >
-                Home
-              </button>
-              <button
-                onClick={() => scrollToSection('about')}
-                className="text-slate-400 hover:text-sky-400 transition-colors cursor-pointer"
-              >
-                About
-              </button>
-              <button
-                onClick={() => scrollToSection('how-it-works')}
-                className="text-slate-400 hover:text-sky-400 transition-colors cursor-pointer"
-              >
-                How It Works
-              </button>
-              <button
-                onClick={() => {
-                  setCurrentView('privacy');
-                  window.scrollTo({ top: 0, behavior: 'smooth' });
-                }}
-                className="text-slate-400 hover:text-sky-400 transition-colors cursor-pointer"
-              >
-                Privacy Policy
-              </button>
-              <button
-                onClick={() => {
-                  setCurrentView('terms');
-                  window.scrollTo({ top: 0, behavior: 'smooth' });
-                }}
-                className="text-slate-400 hover:text-sky-400 transition-colors cursor-pointer"
-              >
-                Terms & Conditions
-              </button>
-            </div>
-          </div>
-
-          <div className="border-t border-slate-900 pt-5 flex flex-col sm:flex-row items-center justify-between gap-3 text-[11px] text-slate-600">
+      <footer className="border-t border-slate-900 py-6 bg-slate-950/60 text-xs text-slate-500">
+        <div className="max-w-6xl mx-auto px-4">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 text-[11px] text-slate-600">
             <p>
               Designed & Developed by{' '}
               <button
