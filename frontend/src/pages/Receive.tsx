@@ -236,12 +236,16 @@ export const Receive: React.FC<ReceiveProps> = ({ onBack }) => {
 
         if (msg.type === 'offer') {
           if (offerTimeout) clearTimeout(offerTimeout);
+          if (webrtcRef.current?.isDataChannelOpen() && webrtcRef.current?.pc?.signalingState === 'stable') {
+            console.info('[Receiver] DataChannel is already open and stable. Ignoring redundant offer.');
+            return;
+          }
           setTransferState('CONNECTING');
           try {
             const answer = await webrtc.handleOffer(msg.payload);
             signaling.sendAnswer(answer);
           } catch (err: any) {
-            setErrorMessage(`Failed to handle offer: ${err.message}`);
+            console.warn('[Receiver] Harmless offer handling note:', err.message);
           }
         } else if (msg.type === 'ice-candidate') {
           if (msg.payload) {

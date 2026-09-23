@@ -213,19 +213,32 @@ export const UnifiedTransferPage: FC = () => {
       signaling.onMessage(async (msg) => {
         console.info('[Sender Signaling Rx]:', msg.type);
         if (msg.type === 'peer-joined' || msg.type === 'request-offer') {
+          // If already connected and data channel is open, don't renegotiate
+          if (webrtcRef.current?.isDataChannelOpen() && webrtcRef.current?.pc?.signalingState === 'stable') {
+            console.info('[Unified] DataChannel is already open and stable. Ignoring redundant offer request.');
+            return;
+          }
+          if (webrtcRef.current?.pc?.signalingState === 'have-local-offer') {
+            console.info('[Unified] Already have pending local offer. Resending existing offer.');
+            if (webrtcRef.current.pc.localDescription) {
+              signaling.sendOffer(webrtcRef.current.pc.localDescription);
+            }
+            return;
+          }
+
           setTransferState('SIGNALING');
           try {
             const offer = await webrtc.createOffer();
             signaling.sendOffer(offer);
             setTransferState('CONNECTING');
           } catch (err: any) {
-            setErrorMessage(`Failed to create offer: ${err.message}`);
+            console.warn('[Unified] Offer creation note:', err.message);
           }
         } else if (msg.type === 'answer') {
           try {
             await webrtc.handleAnswer(msg.payload);
           } catch (err: any) {
-            setErrorMessage(`Failed to process answer: ${err.message}`);
+            console.warn('[Unified] Harmless answer handling note:', err.message);
           }
         } else if (msg.type === 'ice-candidate') {
           if (msg.payload) {

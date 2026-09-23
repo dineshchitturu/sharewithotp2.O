@@ -103,6 +103,13 @@ export class WebRTCManager {
 
   public async createOffer(): Promise<RTCSessionDescriptionInit> {
     if (!this.pc) throw new Error('PeerConnection not initialized');
+
+    // If an offer was already created and is currently waiting for answer, return existing local description
+    if (this.pc.signalingState === 'have-local-offer' && this.pc.localDescription) {
+      console.info('[WebRTC] Local offer already pending, reusing existing local description.');
+      return this.pc.localDescription;
+    }
+
     const offer = await this.pc.createOffer();
     await this.pc.setLocalDescription(offer);
     return offer;
@@ -127,6 +134,11 @@ export class WebRTCManager {
 
   public async handleOffer(offer: RTCSessionDescriptionInit): Promise<RTCSessionDescriptionInit> {
     if (!this.pc) throw new Error('PeerConnection not initialized');
+
+    if (this.pc.signalingState === 'have-remote-offer') {
+      console.info('[WebRTC] Already have remote offer, updating remote description.');
+    }
+
     await this.pc.setRemoteDescription(new RTCSessionDescription(offer));
     this.hasRemoteDescription = true;
     await this.processPendingCandidates();
@@ -138,6 +150,18 @@ export class WebRTCManager {
 
   public async handleAnswer(answer: RTCSessionDescriptionInit): Promise<void> {
     if (!this.pc) throw new Error('PeerConnection not initialized');
+
+    // If already in 'stable' state, answer was already processed or connection established
+    if (this.pc.signalingState === 'stable') {
+      console.info('[WebRTC] Connection signalingState is already stable. Ignoring redundant answer.');
+      return;
+    }
+
+    if (this.pc.signalingState !== 'have-local-offer') {
+      console.warn(`[WebRTC] Cannot apply answer in signalingState '${this.pc.signalingState}'. Ignoring.`);
+      return;
+    }
+
     await this.pc.setRemoteDescription(new RTCSessionDescription(answer));
     this.hasRemoteDescription = true;
     await this.processPendingCandidates();
