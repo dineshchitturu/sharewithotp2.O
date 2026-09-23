@@ -149,8 +149,58 @@ export class FileSender {
       totalChunks: this.totalChunks,
     });
 
+    // Wait for receiver transfer_ack to guarantee receiver finalized before sender completes
+    console.info('[FileSender] Chunks & trailer sent. Waiting for receiver transfer_ack...');
+    await this.waitForAck(15000);
+
     // Complete transfer on sender
     this.callbacks.onComplete(undefined, true, '');
+  }
+
+  private waitForAck(timeoutMs: number = 15000): Promise<void> {
+    if (!this.dataChannel || this.dataChannel.readyState !== 'open') {
+      return Promise.resolve();
+    }
+
+    return new Promise((resolve) => {
+      let isDone = false;
+
+      const cleanup = () => {
+        if (!isDone) {
+          isDone = true;
+          clearTimeout(timer);
+          try {
+            if (this.dataChannel) {
+              this.dataChannel.removeEventListener('message', onMessage);
+            }
+          } catch {}
+          resolve();
+        }
+      };
+
+      const onMessage = (event: MessageEvent) => {
+        if (typeof event.data === 'string') {
+          try {
+            const data = JSON.parse(event.data);
+            if (data.type === 'transfer_ack') {
+              console.info('[FileSender] Received transfer_ack from receiver! Verified:', data.verified);
+              cleanup();
+            }
+          } catch {}
+        }
+      };
+
+      const timer = setTimeout(() => {
+        console.warn('[FileSender] ACK wait timeout elapsed, finalizing sender transfer.');
+        cleanup();
+      }, timeoutMs);
+
+      try {
+        this.dataChannel.addEventListener('message', onMessage);
+      } catch {
+        cleanup();
+      }
+    });
   }
 
   private waitForBufferDrain(): Promise<void> {
@@ -259,6 +309,8 @@ export class FileReceiver {
   private dataChannel: RTCDataChannel;
   private callbacks: TransferCallbacks;
 
+  private pendingTrailerHash: string | null = null;
+
   constructor(
     dataChannel: RTCDataChannel,
     callbacks: TransferCallbacks
@@ -270,7 +322,7 @@ export class FileReceiver {
 
   private setupListeners(): void {
     this.dataChannel.binaryType = 'arraybuffer';
-    this.dataChannel.onmessage = (event: MessageEvent) => {
+    this.dataChannel.onmessage = async (event: MessageEvent) => {
       if (this.isCancelled) return;
 
       if (typeof event.data === 'string') {
@@ -279,13 +331,26 @@ export class FileReceiver {
           if (message.type === 'transfer_header') {
             this.handleHeader(message.metadata);
           } else if (message.type === 'transfer_trailer') {
-            this.handleTrailer(message.hash);
+            if (!this.metadata) {
+              this.pendingTrailerHash = message.hash || '';
+            } else {
+              this.handleTrailer(message.hash);
+            }
           }
         } catch (err) {
           console.error('[FileReceiver] Error processing message:', err);
         }
       } else if (event.data instanceof ArrayBuffer) {
         this.handleChunk(event.data);
+      } else if (event.data instanceof Blob) {
+        try {
+          const buffer = await event.data.arrayBuffer();
+          if (!this.isCancelled) {
+            this.handleChunk(buffer);
+          }
+        } catch (err) {
+          console.error('[FileReceiver] Error processing Blob chunk:', err);
+        }
       }
     };
   }
@@ -328,6 +393,13 @@ export class FileReceiver {
       for (const chunk of queued) {
         this.handleChunk(chunk);
       }
+    }
+
+    // Process pending trailer if it arrived prior to header
+    if (this.pendingTrailerHash !== null) {
+      const hash = this.pendingTrailerHash;
+      this.pendingTrailerHash = null;
+      this.handleTrailer(hash);
     }
   }
 
@@ -380,7 +452,7 @@ export class FileReceiver {
             console.warn('[FileReceiver] All bytes received. Auto-finalizing transfer.');
             this.handleTrailer(undefined);
           }
-        }, 1000);
+        }, 400);
       }
     }
   }
@@ -402,6 +474,17 @@ export class FileReceiver {
       this.currentBatch = [];
       this.currentBatchBytes = 0;
     }
+
+    // Emit 100% progress on receiver
+    this.callbacks.onProgress({
+      bytesTransferred: this.metadata.size,
+      totalBytes: this.metadata.size,
+      percentage: 100,
+      speedBytesPerSec: 0,
+      remainingSeconds: 0,
+      currentChunk: this.metadata.totalChunks,
+      totalChunks: this.metadata.totalChunks,
+    });
 
     const blob = new Blob(this.blobParts, {
       type: this.metadata.type || 'application/octet-stream',

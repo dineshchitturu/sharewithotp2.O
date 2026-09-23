@@ -49,13 +49,6 @@ export const RoomJoiner: React.FC<RoomJoinerProps> = ({
     const rawVal = e.target.value.replace(/\D/g, '').slice(0, 6);
     setOtp(rawVal);
     setValidationError(null);
-
-    // Auto-submit when user finishes entering 6 digits
-    if (rawVal.length === 6 && !isLoading) {
-      setTimeout(() => {
-        doJoin(rawVal);
-      }, 100);
-    }
   };
 
   const handlePaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
@@ -64,11 +57,6 @@ export const RoomJoiner: React.FC<RoomJoinerProps> = ({
     if (pasted) {
       setOtp(pasted);
       setValidationError(null);
-      if (pasted.length === 6 && !isLoading) {
-        setTimeout(() => {
-          doJoin(pasted);
-        }, 100);
-      }
     }
   };
 

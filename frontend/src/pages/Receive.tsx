@@ -162,8 +162,36 @@ export const Receive: React.FC<ReceiveProps> = ({ onBack }) => {
             setErrorMessage('DataChannel encountered an error.');
           };
 
+          let pingCount = 0;
+          const sendReady = () => {
+            if (dataChannel.readyState === 'open') {
+              try {
+                dataChannel.send(JSON.stringify({ type: 'receiver_ready' }));
+                console.info('[Receiver] Sent receiver_ready to sender.');
+              } catch {}
+            }
+          };
+
+          if (dataChannel.readyState === 'open') {
+            sendReady();
+          } else {
+            dataChannel.onopen = () => {
+              sendReady();
+            };
+          }
+
+          const readyInterval = window.setInterval(() => {
+            if (isCompletedRef.current || pingCount > 10) {
+              window.clearInterval(readyInterval);
+              return;
+            }
+            pingCount++;
+            sendReady();
+          }, 350);
+
           const receiver = new FileReceiver(dataChannel, {
             onMetadata: (meta) => {
+              window.clearInterval(readyInterval);
               setFileName(meta.name);
               setFileSize(meta.size);
             },
@@ -174,6 +202,7 @@ export const Receive: React.FC<ReceiveProps> = ({ onBack }) => {
               }
             },
             onComplete: (url, hashVerified, hash) => {
+              window.clearInterval(readyInterval);
               isCompletedRef.current = true;
               setErrorMessage(null);
               if (url) setDownloadUrl(url);
@@ -188,6 +217,7 @@ export const Receive: React.FC<ReceiveProps> = ({ onBack }) => {
               // Gracefully maintain connection so file download completes without network aborts
             },
             onError: (err) => {
+              window.clearInterval(readyInterval);
               if (!isCompletedRef.current) {
                 setErrorMessage(err);
                 setTransferState('FAILED');

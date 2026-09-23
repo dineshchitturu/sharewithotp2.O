@@ -144,10 +144,45 @@ export const Send: React.FC<SendProps> = ({ onBack }) => {
           }
           setErrorMessage(null);
           setTransferState('CONNECTED');
+
           const fileToStream = selectedFileRef.current;
-          if (fileToStream && !isStreamingRef.current) {
-            startStreaming(fileToStream, dataChannel);
-          }
+          if (!fileToStream) return;
+
+          // Notify receiver that sender DataChannel is open
+          try {
+            dataChannel.send(JSON.stringify({ type: 'sender_ready' }));
+          } catch {}
+
+          // Fallback: start streaming after 2.5s if receiver_ready is delayed
+          const readyFallbackTimer = window.setTimeout(() => {
+            if (!isStreamingRef.current && !isCompletedRef.current && dataChannel.readyState === 'open') {
+              console.info('[Sender] Fallback timer elapsed. Starting stream to receiver.');
+              startStreaming(fileToStream, dataChannel);
+            }
+          }, 2500);
+
+          const onChannelMessage = (event: MessageEvent) => {
+            if (typeof event.data === 'string') {
+              try {
+                const data = JSON.parse(event.data);
+                if (data.type === 'receiver_ready') {
+                  console.info('[Sender] Received receiver_ready! Beginning stream.');
+                  window.clearTimeout(readyFallbackTimer);
+                  if (!isStreamingRef.current) {
+                    startStreaming(fileToStream, dataChannel);
+                  }
+                } else if (data.type === 'transfer_ack') {
+                  console.info('[Sender] Received transfer_ack via DataChannel.');
+                  isCompletedRef.current = true;
+                  setErrorMessage(null);
+                  setTransferState('COMPLETED');
+                  setStep('completed');
+                }
+              } catch {}
+            }
+          };
+
+          dataChannel.addEventListener('message', onChannelMessage);
         };
 
         dataChannel.onerror = (err) => {
