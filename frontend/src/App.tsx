@@ -91,49 +91,55 @@ export function App() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-sky-500/30 selection:text-sky-200">
+    <div className="min-h-screen ocean-mesh-bg text-slate-100 flex flex-col font-sans selection:bg-cyan-500/30 selection:text-cyan-200 relative overflow-x-hidden">
+      {/* Ambient background light orbs for underwater depth */}
+      <div className="fixed top-[-150px] left-[-100px] w-[550px] h-[550px] rounded-full bg-cyan-500/10 blur-[130px] pointer-events-none animate-pulse-glow -z-10" />
+      <div className="fixed top-[-100px] right-[-100px] w-[600px] h-[600px] rounded-full bg-indigo-600/12 blur-[140px] pointer-events-none -z-10" />
+      <div className="fixed bottom-[15%] left-[-120px] w-[500px] h-[500px] rounded-full bg-blue-600/10 blur-[130px] pointer-events-none -z-10" />
+      <div className="fixed bottom-[-100px] right-[-80px] w-[550px] h-[550px] rounded-full bg-purple-600/10 blur-[140px] pointer-events-none -z-10" />
+
       {/* ======================================================== */}
-      {/* FIXED / STICKY NAVIGATION BAR                            */}
+      {/* FIXED / STICKY GLASSMORPHIC NAVIGATION BAR               */}
       {/* ======================================================== */}
-      <header className="border-b border-slate-900 bg-slate-950/85 backdrop-blur-md sticky top-0 z-50">
+      <header className="border-b border-white/10 bg-[#060e20]/75 backdrop-blur-2xl sticky top-0 z-50 shadow-[0_4px_30px_rgba(0,0,0,0.35)]">
         <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
           {/* Brand Logo */}
           <button
             onClick={() => scrollToSection('home')}
-            className="flex items-center gap-2.5 hover:opacity-90 transition-opacity cursor-pointer text-left"
+            className="flex items-center gap-2.5 hover:opacity-95 transition-all cursor-pointer text-left group"
           >
-            <div className="w-8 h-8 rounded-lg bg-sky-600 flex items-center justify-center text-white font-bold shadow-md shadow-sky-600/30">
+            <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-indigo-600 via-blue-500 to-cyan-400 flex items-center justify-center text-white font-bold shadow-lg shadow-cyan-500/25 border border-white/20 group-hover:scale-105 transition-transform duration-200">
               <ArrowLeftRight className="w-4 h-4" />
             </div>
             <div>
-              <span className="font-bold text-base tracking-tight text-white block leading-tight">
+              <span className="font-extrabold text-base tracking-tight text-white block leading-tight group-hover:text-cyan-200 transition-colors">
                 ShareWithOTP
               </span>
-              <span className="text-[10px] uppercase font-semibold tracking-wider text-sky-400 block leading-none">
+              <span className="text-[9px] uppercase font-bold tracking-widest text-cyan-400 block leading-none">
                 P2P File Transfer
               </span>
             </div>
           </button>
 
           {/* Desktop Navigation Links */}
-          <nav className="hidden md:flex items-center gap-1 lg:gap-2">
+          <nav className="hidden md:flex items-center gap-1.5 bg-white/5 border border-white/10 px-3 py-1.5 rounded-full backdrop-blur-md shadow-inner">
             <button
               onClick={() => scrollToSection('home')}
-              className="text-xs font-semibold px-3 py-2 rounded-xl text-slate-300 hover:text-white hover:bg-slate-900/80 transition-colors cursor-pointer"
+              className="text-xs font-semibold px-3.5 py-1 rounded-full text-slate-300 hover:text-white hover:bg-white/10 transition-all cursor-pointer"
             >
               Home
             </button>
 
             <button
               onClick={() => scrollToSection('about')}
-              className="text-xs font-semibold px-3 py-2 rounded-xl text-slate-300 hover:text-white hover:bg-slate-900/80 transition-colors cursor-pointer"
+              className="text-xs font-semibold px-3.5 py-1 rounded-full text-slate-300 hover:text-white hover:bg-white/10 transition-all cursor-pointer"
             >
               About
             </button>
 
             <button
               onClick={() => scrollToSection('how-it-works')}
-              className="text-xs font-semibold px-3 py-2 rounded-xl text-slate-300 hover:text-white hover:bg-slate-900/80 transition-colors cursor-pointer"
+              className="text-xs font-semibold px-3.5 py-1 rounded-full text-slate-300 hover:text-white hover:bg-white/10 transition-all cursor-pointer"
             >
               How It Works
             </button>
@@ -143,25 +149,25 @@ export function App() {
           <div className="hidden sm:flex items-center gap-2.5">
             <button
               onClick={handleStartSend}
-              className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all shadow-md cursor-pointer ${
+              className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-semibold transition-all cursor-pointer ${
                 currentView === 'send'
-                  ? 'bg-sky-500 text-white shadow-sky-500/25 ring-2 ring-sky-400/40'
-                  : 'bg-sky-600 hover:bg-sky-500 active:bg-sky-700 text-white shadow-sky-600/20'
+                  ? 'btn-luminous-pill ring-2 ring-cyan-400/50'
+                  : 'btn-luminous-pill'
               }`}
             >
-              <ArrowUpCircle className="w-4 h-4" />
+              <ArrowUpCircle className="w-3.5 h-3.5" />
               <span>Send File</span>
             </button>
 
             <button
               onClick={handleStartReceive}
-              className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+              className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-semibold transition-all cursor-pointer ${
                 currentView === 'receive'
-                  ? 'bg-slate-800 text-emerald-300 border border-emerald-500/50 ring-2 ring-emerald-500/30'
-                  : 'bg-slate-900 hover:bg-slate-850 text-emerald-400 border border-slate-800 hover:border-emerald-500/40'
+                  ? 'btn-glass-pill border-emerald-400/60 bg-emerald-950/40 text-emerald-300 ring-2 ring-emerald-500/30'
+                  : 'btn-glass-pill border-white/15 hover:border-emerald-400/40 text-emerald-300 hover:bg-emerald-950/20'
               }`}
             >
-              <ArrowDownCircle className="w-4 h-4" />
+              <ArrowDownCircle className="w-3.5 h-3.5" />
               <span>Receive File</span>
             </button>
           </div>
@@ -170,7 +176,7 @@ export function App() {
           <div className="flex md:hidden items-center gap-2">
             <button
               onClick={handleStartSend}
-              className="flex sm:hidden items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-sky-600 text-white shadow-sm"
+              className="flex sm:hidden items-center gap-1 px-3 py-1.5 rounded-full text-xs font-semibold btn-luminous-pill text-white"
             >
               <ArrowUpCircle className="w-3.5 h-3.5" />
               <span>Send</span>
@@ -178,7 +184,7 @@ export function App() {
 
             <button
               onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-              className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-900 transition-colors cursor-pointer"
+              className="p-2 rounded-xl text-slate-300 hover:text-white hover:bg-white/10 border border-white/10 transition-colors cursor-pointer"
               aria-label="Toggle navigation menu"
             >
               {isMobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
@@ -188,39 +194,39 @@ export function App() {
 
         {/* Mobile Dropdown Menu */}
         {isMobileMenuOpen && (
-          <div className="md:hidden border-t border-slate-900 bg-slate-950/95 px-4 py-4 space-y-3 shadow-2xl backdrop-blur-xl">
+          <div className="md:hidden border-t border-white/10 bg-[#071126]/95 px-4 py-4 space-y-3 shadow-2xl backdrop-blur-2xl">
             <div className="flex flex-col space-y-1">
               <button
                 onClick={() => scrollToSection('home')}
-                className="w-full text-left px-3 py-2.5 rounded-xl text-sm font-medium text-slate-200 hover:bg-slate-900 hover:text-white transition-colors"
+                className="w-full text-left px-3.5 py-2.5 rounded-xl text-sm font-medium text-slate-200 hover:bg-white/10 hover:text-white transition-colors"
               >
                 Home
               </button>
               <button
                 onClick={() => scrollToSection('about')}
-                className="w-full text-left px-3 py-2.5 rounded-xl text-sm font-medium text-slate-200 hover:bg-slate-900 hover:text-white transition-colors"
+                className="w-full text-left px-3.5 py-2.5 rounded-xl text-sm font-medium text-slate-200 hover:bg-white/10 hover:text-white transition-colors"
               >
                 About
               </button>
               <button
                 onClick={() => scrollToSection('how-it-works')}
-                className="w-full text-left px-3 py-2.5 rounded-xl text-sm font-medium text-slate-200 hover:bg-slate-900 hover:text-white transition-colors"
+                className="w-full text-left px-3.5 py-2.5 rounded-xl text-sm font-medium text-slate-200 hover:bg-white/10 hover:text-white transition-colors"
               >
                 How It Works
               </button>
             </div>
 
-            <div className="pt-2 border-t border-slate-900 flex flex-col gap-2">
+            <div className="pt-2 border-t border-white/10 flex flex-col gap-2">
               <button
                 onClick={handleStartSend}
-                className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-sm font-semibold text-white bg-sky-600 hover:bg-sky-500 shadow-md shadow-sky-600/25"
+                className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-full text-sm font-semibold text-white btn-luminous-pill"
               >
                 <ArrowUpCircle className="w-4 h-4" />
                 <span>Send File</span>
               </button>
               <button
                 onClick={handleStartReceive}
-                className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-sm font-semibold text-emerald-400 bg-slate-900 border border-slate-800 hover:border-emerald-500/40"
+                className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-full text-sm font-semibold text-emerald-300 btn-glass-pill border-emerald-400/40 bg-emerald-950/30"
               >
                 <ArrowDownCircle className="w-4 h-4" />
                 <span>Receive File</span>
@@ -233,7 +239,7 @@ export function App() {
       {/* ======================================================== */}
       {/* MAIN CONTENT AREA                                        */}
       {/* ======================================================== */}
-      <main className="flex-1 flex flex-col justify-center">
+      <main className="flex-1 flex flex-col justify-center relative z-10">
         {currentView === 'home' && (
           <Home
             onNavigate={(view) => {
@@ -251,26 +257,26 @@ export function App() {
       {/* ======================================================== */}
       {/* FOOTER                                                   */}
       {/* ======================================================== */}
-      <footer className="border-t border-slate-900 py-6 bg-slate-950/60 text-xs text-slate-500">
+      <footer className="border-t border-white/10 py-6 bg-[#060e20]/60 backdrop-blur-xl text-xs text-slate-400 relative z-10">
         <div className="max-w-6xl mx-auto px-4">
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 text-[11px] text-slate-600">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 text-[11px] text-slate-400">
             <p>
               Designed & Developed by{' '}
               <button
                 onClick={() => scrollToSection('about')}
-                className="text-slate-300 font-medium hover:text-sky-400 transition-colors cursor-pointer"
+                className="text-white font-semibold hover:text-cyan-400 transition-colors cursor-pointer underline decoration-cyan-500/40 underline-offset-2"
               >
                 Dinesh Chitturu
               </button>{' '}
               • Ephemeral WebRTC & One-Time Password Engine
             </p>
 
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-3">
               <a
                 href="https://github.com/dineshchitturu"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="hover:text-slate-300 flex items-center gap-1 transition-colors"
+                className="hover:text-white flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/5 border border-white/10 hover:border-white/20 transition-all"
               >
                 <GithubIcon className="w-3.5 h-3.5" />
                 <span>GitHub</span>
@@ -279,14 +285,14 @@ export function App() {
                 href="https://www.linkedin.com/in/dinesh-chitturu-b4152b38b/"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="hover:text-slate-300 flex items-center gap-1 transition-colors"
+                className="hover:text-white flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/5 border border-white/10 hover:border-white/20 transition-all"
               >
                 <LinkedinIcon className="w-3.5 h-3.5" />
                 <span>LinkedIn</span>
               </a>
               <a
                 href="mailto:dineshchitturu2005@gmail.com"
-                className="hover:text-slate-300 flex items-center gap-1 transition-colors"
+                className="hover:text-white flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/5 border border-white/10 hover:border-white/20 transition-all"
               >
                 <Mail className="w-3.5 h-3.5" />
                 <span>Contact</span>

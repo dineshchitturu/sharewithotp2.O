@@ -20,40 +20,42 @@ interface AboutProps {
 
 export const About: React.FC<AboutProps> = ({ onBack, onNavigate }) => {
   return (
-    <div className="w-full max-w-4xl mx-auto px-4 py-8 md:py-12">
+    <div className="w-full max-w-4xl mx-auto px-4 py-8 md:py-14">
       {/* Top Bar */}
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-8 flex items-center justify-between">
         <button
           onClick={onBack}
-          className="text-xs text-slate-400 hover:text-white flex items-center gap-1.5 transition-colors font-medium"
+          className="btn-glass-pill text-xs px-3.5 py-1.5 gap-1.5 text-slate-300 hover:text-white"
         >
-          <ArrowLeft className="w-4 h-4" />
+          <ArrowLeft className="w-3.5 h-3.5" />
           <span>Back to Home</span>
         </button>
-        <span className="text-xs font-mono text-slate-500">
+        <span className="text-xs font-mono text-slate-400">
           ShareWithOTP2.O • Developer Profile
         </span>
       </div>
 
       {/* Hero Header */}
       <div className="text-center mb-10">
-        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-sky-500/30 bg-sky-950/40 text-sky-400 text-xs font-semibold uppercase tracking-wider mb-3">
-          <Cpu className="w-3.5 h-3.5" />
-          <span>Developer & Architect</span>
+        <div className="inline-flex items-center gap-2 mb-3">
+          <span className="badge-luminous-pill">
+            <Cpu className="w-3.5 h-3.5 text-cyan-400" />
+            <span>Developer & Architect</span>
+          </span>
         </div>
         <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-white mb-2">
           About ShareWithOTP2.O
         </h1>
-        <p className="text-sm sm:text-base text-slate-400 max-w-xl mx-auto">
+        <p className="text-sm sm:text-base text-slate-300 max-w-xl mx-auto">
           A zero-knowledge, browser-to-browser temporary file sharing engine built with modern WebRTC, FastAPI, and cryptographic OTP verification.
         </p>
       </div>
 
       {/* Developer Card */}
-      <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-6 md:p-8 shadow-2xl backdrop-blur-sm mb-10">
-        <div className="flex flex-col sm:flex-row items-center sm:items-start gap-6">
+      <div className="glass-panel rounded-3xl p-6 md:p-8 mb-10 relative overflow-hidden">
+        <div className="flex flex-col sm:flex-row items-center sm:items-start gap-6 relative z-10">
           {/* Avatar / Icon Badge */}
-          <div className="w-24 h-24 rounded-2xl bg-gradient-to-br from-sky-600 to-indigo-600 flex items-center justify-center text-white text-3xl font-black shadow-lg shadow-sky-600/30 shrink-0">
+          <div className="w-22 h-22 sm:w-24 sm:h-24 rounded-2xl bg-gradient-to-tr from-indigo-600 via-blue-600 to-cyan-400 flex items-center justify-center text-white text-2xl sm:text-3xl font-black shadow-xl shadow-cyan-500/25 border border-white/20 shrink-0">
             DC
           </div>
 
@@ -62,22 +64,26 @@ export const About: React.FC<AboutProps> = ({ onBack, onNavigate }) => {
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-2">
               <div>
                 <h2 className="text-2xl font-bold text-white tracking-tight">Dinesh Chitturu</h2>
-                {/* <p className="text-sm font-medium text-sky-400">Full-Stack & Systems Engineer</p> */}
+                <p className="text-xs font-semibold text-cyan-400">Systems & Distributed Web Developer</p>
               </div>
 
-              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-950/60 border border-slate-800 text-[11px] text-emerald-400 font-mono self-center sm:self-auto">
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-950/50 border border-emerald-500/30 text-[11px] text-emerald-300 font-mono self-center sm:self-auto">
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-                {/* <span>Available for collaborations</span> */}
+                <span>Online & Active</span>
               </div>
             </div>
 
+            <p className="text-xs sm:text-sm text-slate-300 leading-relaxed mb-4 max-w-xl">
+              Specializing in low-latency WebRTC data channels, resilient client-side chunk streaming, and zero-footprint backend signaling.
+            </p>
+
             {/* Contact & Social Links */}
-            <div className="flex flex-wrap items-center justify-center sm:justify-start gap-3 mt-4">
+            <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2.5">
               <a
                 href="mailto:dineshchitturu2005@gmail.com"
-                className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-slate-950/80 hover:bg-slate-800 border border-slate-800 hover:border-sky-500/50 text-slate-200 text-xs font-medium transition-all"
+                className="btn-glass-pill text-xs px-3.5 py-1.5 gap-2 text-slate-200"
               >
-                <Mail className="w-4 h-4 text-sky-400" />
+                <Mail className="w-3.5 h-3.5 text-cyan-400" />
                 <span>dineshchitturu2005@gmail.com</span>
               </a>
 
@@ -85,22 +91,22 @@ export const About: React.FC<AboutProps> = ({ onBack, onNavigate }) => {
                 href="https://www.linkedin.com/in/dinesh-chitturu-b4152b38b/"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-slate-950/80 hover:bg-slate-800 border border-slate-800 hover:border-blue-500/50 text-slate-200 text-xs font-medium transition-all"
+                className="btn-glass-pill text-xs px-3.5 py-1.5 gap-2 text-slate-200"
               >
-                <LinkedinIcon className="w-4 h-4 text-blue-400" />
+                <LinkedinIcon className="w-3.5 h-3.5 text-blue-400" />
                 <span>LinkedIn Profile</span>
-                <ExternalLink className="w-3 h-3 text-slate-500" />
+                <ExternalLink className="w-3 h-3 text-slate-400" />
               </a>
 
               <a
                 href="https://github.com/dineshchitturu"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-slate-950/80 hover:bg-slate-800 border border-slate-800 hover:border-slate-600 text-slate-200 text-xs font-medium transition-all"
+                className="btn-glass-pill text-xs px-3.5 py-1.5 gap-2 text-slate-200"
               >
-                <GithubIcon className="w-4 h-4 text-slate-300" />
+                <GithubIcon className="w-3.5 h-3.5 text-slate-300" />
                 <span>GitHub @dineshchitturu</span>
-                <ExternalLink className="w-3 h-3 text-slate-500" />
+                <ExternalLink className="w-3 h-3 text-slate-400" />
               </a>
             </div>
           </div>
@@ -109,8 +115,8 @@ export const About: React.FC<AboutProps> = ({ onBack, onNavigate }) => {
 
       {/* Architecture Highlights Grid */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-10">
-        <div className="bg-slate-900/60 border border-slate-800/80 rounded-xl p-5">
-          <div className="w-9 h-9 rounded-lg bg-sky-950/80 text-sky-400 flex items-center justify-center mb-3">
+        <div className="glass-feature-card p-6">
+          <div className="w-10 h-10 rounded-xl bg-cyan-950/60 border border-cyan-500/30 text-cyan-400 flex items-center justify-center mb-3 shadow-md">
             <Zap className="w-4 h-4" />
           </div>
           <h3 className="font-bold text-white text-base mb-1">Direct P2P DataChannels</h3>
@@ -119,8 +125,8 @@ export const About: React.FC<AboutProps> = ({ onBack, onNavigate }) => {
           </p>
         </div>
 
-        <div className="bg-slate-900/60 border border-slate-800/80 rounded-xl p-5">
-          <div className="w-9 h-9 rounded-lg bg-emerald-950/80 text-emerald-400 flex items-center justify-center mb-3">
+        <div className="glass-feature-card p-6">
+          <div className="w-10 h-10 rounded-xl bg-emerald-950/60 border border-emerald-500/30 text-emerald-400 flex items-center justify-center mb-3 shadow-md">
             <Shield className="w-4 h-4" />
           </div>
           <h3 className="font-bold text-white text-base mb-1">Ephemeral OTP Authentication</h3>
@@ -129,8 +135,8 @@ export const About: React.FC<AboutProps> = ({ onBack, onNavigate }) => {
           </p>
         </div>
 
-        <div className="bg-slate-900/60 border border-slate-800/80 rounded-xl p-5">
-          <div className="w-9 h-9 rounded-lg bg-indigo-950/80 text-indigo-400 flex items-center justify-center mb-3">
+        <div className="glass-feature-card p-6">
+          <div className="w-10 h-10 rounded-xl bg-indigo-950/60 border border-indigo-500/30 text-indigo-400 flex items-center justify-center mb-3 shadow-md">
             <Cpu className="w-4 h-4" />
           </div>
           <h3 className="font-bold text-white text-base mb-1">Streaming SHA-256 Checksum</h3>
@@ -141,19 +147,19 @@ export const About: React.FC<AboutProps> = ({ onBack, onNavigate }) => {
       </div>
 
       {/* Action CTA */}
-      <div className="text-center p-6 bg-slate-900/40 border border-slate-800/60 rounded-2xl">
-        <h3 className="text-base font-bold text-white mb-2">Ready to try ShareWithOTP2.O?</h3>
-        <p className="text-xs text-slate-400 mb-4">No account registration or software installation required.</p>
+      <div className="glass-panel p-8 rounded-3xl text-center">
+        <h3 className="text-base sm:text-lg font-bold text-white mb-2">Ready to try ShareWithOTP2.O?</h3>
+        <p className="text-xs text-slate-300 mb-5">No account registration or software installation required.</p>
         <div className="flex items-center justify-center gap-3">
           <button
             onClick={() => onNavigate('send')}
-            className="px-5 py-2.5 rounded-xl text-xs font-semibold text-white bg-sky-600 hover:bg-sky-500 transition-colors shadow-md shadow-sky-600/20"
+            className="btn-luminous-pill px-6 py-2.5 text-xs font-semibold"
           >
-            Send Files
+            Send Files →
           </button>
           <button
             onClick={() => onNavigate('how-it-works')}
-            className="px-5 py-2.5 rounded-xl text-xs font-semibold text-slate-300 hover:text-white bg-slate-900 hover:bg-slate-800 border border-slate-800 transition-colors"
+            className="btn-glass-pill px-6 py-2.5 text-xs font-semibold text-slate-200"
           >
             How It Works →
           </button>

@@ -338,18 +338,18 @@ export const Send: React.FC<SendProps> = ({ onBack }) => {
   };
 
   return (
-    <div className="w-full max-w-2xl mx-auto px-4 py-8">
-      <div className="mb-6 flex items-center justify-between">
+    <div className="w-full max-w-2xl mx-auto px-4 py-8 md:py-12">
+      <div className="mb-8 flex items-center justify-between">
         <button
           onClick={onBack}
-          className="text-xs text-slate-400 hover:text-white flex items-center gap-1.5 transition-colors font-medium"
+          className="btn-glass-pill text-xs px-3.5 py-1.5 gap-1.5 text-slate-300 hover:text-white"
         >
-          ← Back to Home
+          <span>← Back to Home</span>
         </button>
         {step !== 'create' && otp && (
-          <span className="text-xs font-mono text-slate-400 bg-slate-900/90 px-3 py-1 rounded-full border border-slate-800 flex items-center gap-1.5">
-            <span>Code:</span>
-            <strong className="text-sky-300 font-bold">{otp.length === 6 ? `${otp.slice(0, 3)} ${otp.slice(3)}` : otp}</strong>
+          <span className="badge-luminous-pill font-mono text-xs">
+            <span className="text-slate-400 font-sans">Code:</span>
+            <strong className="text-white font-bold tracking-wider">{otp.length === 6 ? `${otp.slice(0, 3)} ${otp.slice(3)}` : otp}</strong>
           </span>
         )}
       </div>
@@ -369,22 +369,22 @@ export const Send: React.FC<SendProps> = ({ onBack }) => {
             }}
           />
 
-          <div className="pt-2">
+          <div className="pt-2 max-w-lg mx-auto">
             <button
               onClick={handleCreateTransfer}
               disabled={isLoading || !selectedFile}
-              className="w-full flex items-center justify-center gap-2.5 py-4 px-6 rounded-2xl font-semibold text-white bg-sky-600 hover:bg-sky-500 active:bg-sky-700 disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-xl shadow-sky-600/25 text-base"
+              className="w-full btn-luminous-pill py-4 px-6 text-sm font-bold gap-2.5 shadow-xl shadow-cyan-500/20"
             >
               {isLoading ? (
                 <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
               ) : (
                 <>
-                  <Sparkles className="w-5 h-5 text-sky-200" />
+                  <Sparkles className="w-4 h-4 text-cyan-200" />
                   <span>Generate One-Time Code & Share</span>
                 </>
               )}
             </button>
-            <p className="text-center text-xs text-slate-500 mt-2.5">
+            <p className="text-center text-xs text-slate-400 mt-3 font-medium">
               Direct peer-to-peer WebRTC transfer • Zero server storage
             </p>
           </div>

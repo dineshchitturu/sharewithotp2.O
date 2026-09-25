@@ -20,55 +20,65 @@ export const TransferComplete: React.FC<TransferCompleteProps> = ({
   onReset,
 }) => {
   return (
-    <div className="w-full max-w-md mx-auto bg-slate-900/90 border border-slate-800 rounded-2xl p-6 md:p-8 shadow-2xl backdrop-blur-sm text-center">
-      <div className="w-16 h-16 mx-auto mb-5 rounded-2xl bg-emerald-950/80 border border-emerald-700/60 flex items-center justify-center text-emerald-400">
+    <div className="w-full max-w-lg mx-auto glass-panel rounded-3xl p-6 md:p-8 shadow-2xl relative overflow-hidden text-center">
+      {/* Subtle top edge glow */}
+      <div className="absolute top-0 left-10 right-10 h-[1px] bg-gradient-to-r from-transparent via-emerald-400/40 to-transparent" />
+      <div className="absolute -top-16 left-1/2 -translate-x-1/2 w-48 h-28 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
+
+      <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-emerald-950/70 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shadow-xl shadow-emerald-950/60">
         <CheckCircle2 className="w-8 h-8" />
       </div>
 
-      <span className="text-xs font-semibold uppercase tracking-wider text-emerald-400 block mb-1">
-        Success
+      <span className="text-[11px] font-bold uppercase tracking-widest text-emerald-400 block mb-1">
+        Transfer Successful
       </span>
-      <h2 className="text-2xl font-black tracking-tight text-white mb-2">TRANSFER COMPLETE ✓</h2>
+      <h2 className="text-2xl font-black tracking-tight text-white mb-2">
+        Transfer Complete
+      </h2>
 
-      <div className="bg-slate-950/70 border border-slate-800/80 rounded-xl p-4 my-6 text-left">
+      <div className="glass-feature-card p-4 my-6 text-left">
         <div className="flex items-center gap-3 mb-2">
-          <FileCheck className="w-5 h-5 text-sky-400 shrink-0" />
-          <span className="font-semibold text-white text-sm truncate">{fileName}</span>
+          <div className="w-8 h-8 rounded-lg bg-cyan-950/60 border border-cyan-500/25 flex items-center justify-center text-cyan-400 shrink-0">
+            <FileCheck className="w-4 h-4" />
+          </div>
+          <span className="font-bold text-white text-sm truncate">{fileName}</span>
         </div>
-        <p className="text-xs font-mono text-slate-400 ml-8">{formatBytes(fileSize)}</p>
+        <p className="text-xs font-mono text-slate-400 ml-11">{formatBytes(fileSize)}</p>
 
         {/* Cryptographic SHA-256 Verification Result */}
-        <div className="mt-3 pt-3 border-t border-slate-800 flex items-center gap-2">
+        <div className="mt-3 pt-3 border-t border-white/10 flex items-center gap-2">
           {hashVerified ? (
             <>
               <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
-              <span className="text-xs font-medium text-emerald-300">File integrity verified ✓</span>
+              <span className="text-xs font-semibold text-emerald-300">File integrity verified (SHA-256 matched)</span>
             </>
           ) : (
             <>
               <ShieldAlert className="w-4 h-4 text-rose-400 shrink-0" />
-              <span className="text-xs font-medium text-rose-300">✕ File integrity verification failed</span>
+              <span className="text-xs font-semibold text-rose-300">✕ File integrity verification warning</span>
             </>
           )}
         </div>
 
         {computedHash && (
-          <div className="mt-2 text-[11px] font-mono text-slate-500 break-all bg-slate-900/80 p-2 rounded border border-slate-800">
-            <span className="text-slate-400 block text-[10px] uppercase font-sans">SHA-256 Digest:</span>
+          <div className="mt-2 text-[10px] font-mono text-slate-400 break-all bg-[#061022]/80 p-2.5 rounded-xl border border-white/10">
+            <span className="text-cyan-400 block text-[9px] uppercase font-sans font-bold tracking-wider mb-0.5">
+              SHA-256 Digest:
+            </span>
             {computedHash}
           </div>
         )}
       </div>
 
-      <div className="bg-slate-950/50 border border-slate-800/60 rounded-xl p-3 mb-6 text-xs text-slate-400 leading-relaxed">
-        The temporary transfer session and one-time code have been permanently destroyed. No files were stored on the server.
+      <div className="bg-white/5 border border-white/10 rounded-2xl p-3.5 mb-6 text-xs text-slate-300 leading-relaxed">
+        The temporary WebRTC room and one-time code have been destroyed. No file data was stored on any server.
       </div>
 
       {downloadUrl && (
         <a
           href={downloadUrl}
           download={fileName}
-          className="w-full flex items-center justify-center gap-2 py-3 px-6 rounded-xl font-medium text-white bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 transition-colors shadow-lg shadow-emerald-600/20 mb-3 text-sm"
+          className="w-full btn-luminous-pill py-3.5 px-6 text-sm font-bold gap-2 mb-3 shadow-lg shadow-cyan-500/20"
         >
           <ArrowDownToLine className="w-4 h-4" />
           <span>Download File ({fileName})</span>
@@ -77,7 +87,7 @@ export const TransferComplete: React.FC<TransferCompleteProps> = ({
 
       <button
         onClick={onReset}
-        className="w-full flex items-center justify-center gap-2 py-3 px-6 rounded-xl font-medium text-white bg-sky-600 hover:bg-sky-500 active:bg-sky-700 transition-colors shadow-lg shadow-sky-600/20"
+        className="w-full btn-glass-pill py-3.5 px-6 text-sm font-semibold gap-2 text-white border-white/20 hover:border-white/40"
       >
         <RotateCcw className="w-4 h-4" />
         <span>Start New Transfer</span>

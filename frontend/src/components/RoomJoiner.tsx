@@ -61,16 +61,19 @@ export const RoomJoiner: React.FC<RoomJoinerProps> = ({
   };
 
   return (
-    <div className="w-full max-w-md mx-auto bg-slate-900/90 border border-slate-800/90 rounded-3xl p-6 md:p-8 shadow-2xl backdrop-blur-sm">
+    <div className="w-full max-w-lg mx-auto glass-panel rounded-3xl p-6 md:p-8 shadow-2xl relative overflow-hidden">
+      {/* Subtle top edge glow */}
+      <div className="absolute top-0 left-10 right-10 h-[1px] bg-gradient-to-r from-transparent via-cyan-400/40 to-transparent" />
+
       <div className="text-center mb-6">
-        <div className="w-12 h-12 rounded-2xl bg-sky-950/80 border border-sky-500/30 text-sky-400 flex items-center justify-center mx-auto mb-3">
-          <KeyRound className="w-6 h-6" />
+        <div className="w-14 h-14 rounded-2xl bg-cyan-950/70 border border-cyan-500/30 text-cyan-400 flex items-center justify-center mx-auto mb-3.5 shadow-lg shadow-cyan-950/50">
+          <KeyRound className="w-7 h-7" />
         </div>
         <h2 className="text-2xl font-bold tracking-tight text-white mb-2 font-sans">
-          Enter the 6-digit OTP
+          Enter 6-Digit OTP
         </h2>
-        <p className="text-sm text-slate-400 max-w-sm mx-auto leading-relaxed">
-          Enter the code from your other device to retrieve the content
+        <p className="text-xs sm:text-sm text-slate-300 max-w-sm mx-auto leading-relaxed">
+          Enter the one-time code shared from the sending device to securely unlock and stream the file.
         </p>
       </div>
 
@@ -78,8 +81,8 @@ export const RoomJoiner: React.FC<RoomJoinerProps> = ({
         <div>
           <div className="flex items-center justify-between mb-2">
             <label htmlFor="joinOtp" className="text-xs font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-              <KeyRound className="w-3.5 h-3.5 text-sky-400" />
-              <span>Enter 6-Digit Code</span>
+              <KeyRound className="w-3.5 h-3.5 text-cyan-400" />
+              <span>One-Time Password</span>
             </label>
             {attemptsRemaining !== null && attemptsRemaining !== undefined && (
               <span className="text-xs font-medium text-amber-400">
@@ -99,7 +102,7 @@ export const RoomJoiner: React.FC<RoomJoinerProps> = ({
             onPaste={handlePaste}
             placeholder="• • • • • •"
             autoFocus
-            className="w-full px-4 py-4 bg-slate-950/90 border-2 border-slate-700 hover:border-slate-600 focus:border-sky-500 focus:ring-4 focus:ring-sky-500/20 rounded-2xl text-slate-100 placeholder-slate-600 focus:outline-none font-mono text-3xl tracking-[0.4em] text-center font-extrabold transition-all"
+            className="w-full px-4 py-4 bg-[#071329]/90 border-2 border-white/15 hover:border-cyan-500/40 focus:border-cyan-400 focus:ring-4 focus:ring-cyan-500/20 rounded-2xl text-white placeholder-slate-600 focus:outline-none font-mono text-3xl sm:text-4xl tracking-[0.35em] text-center font-black transition-all shadow-inner"
           />
         </div>
 
@@ -110,7 +113,7 @@ export const RoomJoiner: React.FC<RoomJoinerProps> = ({
         <button
           type="submit"
           disabled={isLoading || otp.length !== 6}
-          className="w-full mt-2 flex items-center justify-center gap-2 py-4 px-6 rounded-2xl font-semibold text-white bg-sky-600 hover:bg-sky-500 active:bg-sky-700 disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-lg shadow-sky-600/20 text-sm cursor-pointer"
+          className="w-full mt-2 btn-luminous-pill py-4 px-6 text-sm font-bold gap-2 shadow-xl shadow-cyan-500/20"
         >
           {isLoading ? (
             <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
@@ -123,7 +126,7 @@ export const RoomJoiner: React.FC<RoomJoinerProps> = ({
         </button>
       </form>
 
-      <div className="mt-6 pt-5 border-t border-slate-800/80 flex items-center justify-center gap-2 text-xs text-slate-400">
+      <div className="mt-6 pt-5 border-t border-white/10 flex items-center justify-center gap-2 text-xs text-slate-300">
         <ShieldCheck className="w-4 h-4 text-emerald-400" />
         <span>Direct Browser-to-Browser WebRTC Connection</span>
       </div>
