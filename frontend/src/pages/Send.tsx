@@ -187,13 +187,11 @@ export const Send: React.FC<SendProps> = ({ onBack }) => {
             dataChannel.send(JSON.stringify({ type: 'sender_ready' }));
           } catch {}
 
-          // Fallback: If receiver_ready is not received within 800ms, start stream automatically
-          readyFallbackTimer = window.setTimeout(() => {
-            if (!isStreamingRef.current && !isCompletedRef.current && dataChannel.readyState === 'open') {
-              console.info('[Sender] Ready fallback timer elapsed. Starting stream to receiver.');
-              startStreaming(fileToStream, dataChannel);
-            }
-          }, 800);
+          // Start streaming IMMEDIATELY! Zero delay!
+          if (!isStreamingRef.current) {
+            console.info('[Sender] DataChannel open. Initiating immediate stream.');
+            startStreaming(fileToStream, dataChannel);
+          }
         };
 
         dataChannel.onerror = (err) => {
@@ -213,6 +211,12 @@ export const Send: React.FC<SendProps> = ({ onBack }) => {
         console.info('[Sender Signaling Rx]:', msg.type);
 
         if (msg.type === 'peer-joined' || msg.type === 'request-offer') {
+          // Immediately activate transfer progress screen on sender as soon as receiver unlocks
+          if (selectedFileRef.current && !isStreamingRef.current) {
+            setStep('transferring');
+            setTransferState('CONNECTING');
+          }
+
           // If already streaming, completed, or data channel is open, ignore
           if (isCompletedRef.current || (webrtcRef.current?.isDataChannelOpen() && webrtcRef.current?.pc?.signalingState === 'stable')) {
             console.info('[Sender] Connection is already active. Ignoring redundant offer trigger.');

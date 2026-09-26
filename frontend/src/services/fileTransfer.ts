@@ -74,8 +74,8 @@ export class FileSender {
     });
     this.dataChannel.send(headerMsg);
 
-    // Yield 60ms so receiver's browser processes and acknowledges the header before binary chunks arrive
-    await new Promise((r) => setTimeout(r, 60));
+    // Yield to the event loop so metadata header is dispatched before binary chunks arrive
+    await new Promise((r) => setTimeout(r, 0));
 
     let bytesTransferred = 0;
     let lastProgressTime = performance.now();
