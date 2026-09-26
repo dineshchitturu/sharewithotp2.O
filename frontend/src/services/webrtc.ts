@@ -37,8 +37,9 @@ export class WebRTCManager {
           stunServer,
           'stun:stun1.l.google.com:19302',
           'stun:stun2.l.google.com:19302',
-          'stun:stun.relay.metered.ca:80',
-          'stun:openrelay.metered.ca:80',
+          'stun:stun3.l.google.com:19302',
+          'stun:stun4.l.google.com:19302',
+          'stun:stun.cloudflare.com:3478',
         ],
       },
     ];
@@ -49,20 +50,6 @@ export class WebRTCManager {
         urls: turnServer,
         username: this.config.turnUsername || import.meta.env.VITE_TURN_USERNAME,
         credential: this.config.turnCredential || import.meta.env.VITE_TURN_CREDENTIAL,
-      });
-    } else {
-      // Community TURN relay to guarantee connectivity across cellular networks / symmetric NATs
-      iceServers.push({
-        urls: [
-          'turn:standard.relay.metered.ca:80',
-          'turn:standard.relay.metered.ca:443',
-          'turn:standard.relay.metered.ca:443?transport=tcp',
-          'turn:openrelay.metered.ca:80',
-          'turn:openrelay.metered.ca:443',
-          'turn:openrelay.metered.ca:443?transport=tcp',
-        ],
-        username: 'openrelayproject',
-        credential: 'openrelayproject',
       });
     }
 
@@ -84,9 +71,9 @@ export class WebRTCManager {
 
       if (connState === 'connected' || iceState === 'connected' || iceState === 'completed') {
         this.onConnectionStateChange('connected');
-      } else if (connState === 'failed' || iceState === 'failed') {
+      } else if (connState === 'failed') {
         this.onConnectionStateChange('failed');
-      } else if (connState === 'disconnected' || iceState === 'disconnected') {
+      } else if (connState === 'disconnected') {
         this.onConnectionStateChange('disconnected');
       } else if (connState === 'connecting' || iceState === 'checking') {
         this.onConnectionStateChange('connecting');

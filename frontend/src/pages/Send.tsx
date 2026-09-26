@@ -130,7 +130,7 @@ export const Send: React.FC<SendProps> = ({ onBack }) => {
                 setTransferState('DISCONNECTED');
                 setErrorMessage('Peer connection failed. Could not establish direct P2P connection.');
               }
-            }, 5000);
+            }, 15000);
           }
         }
       );
@@ -140,6 +140,8 @@ export const Send: React.FC<SendProps> = ({ onBack }) => {
       const dataChannel = webrtc.dataChannel;
 
       if (dataChannel) {
+        let readyFallbackTimer: any = null;
+
         // Attach DataChannel message listener IMMEDIATELY so no incoming messages are ever dropped
         const onChannelMessage = (event: MessageEvent) => {
           if (typeof event.data === 'string') {
@@ -147,6 +149,10 @@ export const Send: React.FC<SendProps> = ({ onBack }) => {
               const data = JSON.parse(event.data);
               if (data.type === 'receiver_ready') {
                 console.info('[Sender] Received receiver_ready from receiver.');
+                if (readyFallbackTimer) {
+                  window.clearTimeout(readyFallbackTimer);
+                  readyFallbackTimer = null;
+                }
                 const fileToStream = selectedFileRef.current;
                 if (fileToStream && !isStreamingRef.current) {
                   startStreaming(fileToStream, dataChannel);
@@ -181,11 +187,13 @@ export const Send: React.FC<SendProps> = ({ onBack }) => {
             dataChannel.send(JSON.stringify({ type: 'sender_ready' }));
           } catch {}
 
-          // Start streaming immediately! WebRTC SCTP channel is open and reliable.
-          if (!isStreamingRef.current) {
-            console.info('[Sender] DataChannel open. Initiating immediate stream.');
-            startStreaming(fileToStream, dataChannel);
-          }
+          // Fallback: If receiver_ready is not received within 800ms, start stream automatically
+          readyFallbackTimer = window.setTimeout(() => {
+            if (!isStreamingRef.current && !isCompletedRef.current && dataChannel.readyState === 'open') {
+              console.info('[Sender] Ready fallback timer elapsed. Starting stream to receiver.');
+              startStreaming(fileToStream, dataChannel);
+            }
+          }, 800);
         };
 
         dataChannel.onerror = (err) => {
@@ -217,14 +225,9 @@ export const Send: React.FC<SendProps> = ({ onBack }) => {
             return;
           }
 
-          // If offer was already sent and is waiting for answer
+          // If offer was already sent and is waiting for answer, resend local description immediately
           if (webrtcRef.current?.pc?.signalingState === 'have-local-offer') {
-            const timeSinceOffer = Date.now() - offerSentAtRef.current;
-            if (timeSinceOffer < 4000) {
-              console.info(`[Sender] Offer sent ${timeSinceOffer}ms ago, waiting for answer.`);
-              return;
-            }
-            console.info('[Sender] Offer timed out waiting for answer, resending local offer.');
+            console.info('[Sender] Resending local offer to peer upon trigger.');
             if (webrtcRef.current.pc.localDescription) {
               signaling.sendOffer(webrtcRef.current.pc.localDescription);
               offerSentAtRef.current = Date.now();

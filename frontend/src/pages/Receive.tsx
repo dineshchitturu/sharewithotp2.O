@@ -140,7 +140,7 @@ export const Receive: React.FC<ReceiveProps> = ({ onBack }) => {
                 setTransferState('DISCONNECTED');
                 setErrorMessage('Peer connection failed. Could not establish direct P2P connection.');
               }
-            }, 5000);
+            }, 15000);
           }
         },
         (dataChannel) => {
@@ -165,23 +165,7 @@ export const Receive: React.FC<ReceiveProps> = ({ onBack }) => {
             setErrorMessage('DataChannel encountered an error.');
           };
 
-          const sendReady = () => {
-            if (dataChannel.readyState === 'open') {
-              try {
-                dataChannel.send(JSON.stringify({ type: 'receiver_ready' }));
-                console.info('[Receiver] Sent receiver_ready to sender.');
-              } catch {}
-            }
-          };
-
-          if (dataChannel.readyState === 'open') {
-            sendReady();
-          } else {
-            dataChannel.onopen = () => {
-              sendReady();
-            };
-          }
-
+          // Initialize FileReceiver and attach listeners FIRST before notifying sender
           const receiver = new FileReceiver(dataChannel, {
             onMetadata: (meta) => {
               setFileName(meta.name);
@@ -216,6 +200,23 @@ export const Receive: React.FC<ReceiveProps> = ({ onBack }) => {
           });
 
           fileReceiverRef.current = receiver;
+
+          const sendReady = () => {
+            if (dataChannel.readyState === 'open') {
+              try {
+                dataChannel.send(JSON.stringify({ type: 'receiver_ready' }));
+                console.info('[Receiver] Sent receiver_ready to sender.');
+              } catch {}
+            }
+          };
+
+          if (dataChannel.readyState === 'open') {
+            sendReady();
+          } else {
+            dataChannel.onopen = () => {
+              sendReady();
+            };
+          }
         }
       );
       webrtcRef.current = webrtc;
@@ -278,14 +279,17 @@ export const Receive: React.FC<ReceiveProps> = ({ onBack }) => {
 
       await signaling.connect();
 
-      // The backend WebSocket automatically notifies the sender via peer-joined upon receiver connection.
-      // Set a 4-second safety fallback: only request offer if sender hasn't sent one within 4s.
+      // Immediately request offer upon Unlock Share click to activate sharing with zero delay
+      console.info('[Receiver] Connected to signaling. Requesting offer from sender...');
+      signaling.sendRequestOffer();
+
+      // Set a 2.5-second safety fallback: retry request offer if sender hasn't answered yet
       offerTimeout = window.setTimeout(() => {
         if (!isCompletedRef.current && webrtcRef.current && !webrtcRef.current.isDataChannelOpen() && !hasAnsweredRef.current) {
-          console.info('[Receiver] Offer not received within 4s. Requesting offer from sender fallback...');
+          console.info('[Receiver] Offer not received within 2.5s. Retrying offer request...');
           signaling.sendRequestOffer();
         }
-      }, 4000);
+      }, 2500);
     } catch (err: any) {
       setErrorMessage(err.message || 'Verification or connection failed.');
       setStep('join');

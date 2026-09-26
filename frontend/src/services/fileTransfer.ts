@@ -20,6 +20,7 @@ export class FileSender {
   private chunkSize: number;
   private totalBytes: number = 0;
   private totalChunks: number = 0;
+  private currentMetadata: FileMetadata | null = null;
 
   constructor(
     dataChannel: RTCDataChannel,
@@ -30,6 +31,21 @@ export class FileSender {
     this.callbacks = callbacks;
     this.chunkSize = chunkSize;
     this.dataChannel.bufferedAmountLowThreshold = LOW_WATER_MARK;
+
+    this.dataChannel.addEventListener('message', (event: MessageEvent) => {
+      if (typeof event.data === 'string') {
+        try {
+          const msg = JSON.parse(event.data);
+          if (msg.type === 'request_header' && this.currentMetadata && this.dataChannel.readyState === 'open') {
+            console.info('[FileSender] Resending metadata header requested by receiver.');
+            this.dataChannel.send(JSON.stringify({
+              type: 'transfer_header',
+              metadata: this.currentMetadata,
+            }));
+          }
+        } catch {}
+      }
+    });
   }
 
   public cancel(): void {
@@ -50,12 +66,16 @@ export class FileSender {
       totalChunks: this.totalChunks,
       chunkSize: this.chunkSize,
     };
+    this.currentMetadata = metadata;
 
     const headerMsg = JSON.stringify({
       type: 'transfer_header',
       metadata,
     });
     this.dataChannel.send(headerMsg);
+
+    // Yield 60ms so receiver's browser processes and acknowledges the header before binary chunks arrive
+    await new Promise((r) => setTimeout(r, 60));
 
     let bytesTransferred = 0;
     let lastProgressTime = performance.now();
@@ -376,6 +396,13 @@ export class FileReceiver {
 
     this.callbacks.onMetadata?.(meta);
 
+    // Send header_ack back to sender
+    try {
+      if (this.dataChannel.readyState === 'open') {
+        this.dataChannel.send(JSON.stringify({ type: 'header_ack' }));
+      }
+    } catch {}
+
     this.callbacks.onProgress({
       bytesTransferred: 0,
       totalBytes: meta.size,
@@ -406,6 +433,12 @@ export class FileReceiver {
   private handleChunk(chunk: ArrayBuffer): void {
     if (!this.metadata) {
       this.pendingChunks.push(chunk);
+      // Immediately request metadata header from sender
+      try {
+        if (this.dataChannel.readyState === 'open') {
+          this.dataChannel.send(JSON.stringify({ type: 'request_header' }));
+        }
+      } catch {}
       return;
     }
 
