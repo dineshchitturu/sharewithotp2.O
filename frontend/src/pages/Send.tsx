@@ -33,6 +33,8 @@ export const Send: React.FC<SendProps> = ({ onBack }) => {
   const selectedFileRef = useRef<File | null>(null);
   const isStreamingRef = useRef<boolean>(false);
   const disconnectTimeoutRef = useRef<number | null>(null);
+  const isOfferingRef = useRef<boolean>(false);
+  const offerSentAtRef = useRef<number>(0);
 
   useEffect(() => {
     return () => {
@@ -46,6 +48,8 @@ export const Send: React.FC<SendProps> = ({ onBack }) => {
       disconnectTimeoutRef.current = null;
     }
     isStreamingRef.current = false;
+    isOfferingRef.current = false;
+    offerSentAtRef.current = 0;
     if (fileSenderRef.current) {
       fileSenderRef.current.cancel();
       fileSenderRef.current = null;
@@ -136,6 +140,30 @@ export const Send: React.FC<SendProps> = ({ onBack }) => {
       const dataChannel = webrtc.dataChannel;
 
       if (dataChannel) {
+        // Attach DataChannel message listener IMMEDIATELY so no incoming messages are ever dropped
+        const onChannelMessage = (event: MessageEvent) => {
+          if (typeof event.data === 'string') {
+            try {
+              const data = JSON.parse(event.data);
+              if (data.type === 'receiver_ready') {
+                console.info('[Sender] Received receiver_ready from receiver.');
+                const fileToStream = selectedFileRef.current;
+                if (fileToStream && !isStreamingRef.current) {
+                  startStreaming(fileToStream, dataChannel);
+                }
+              } else if (data.type === 'transfer_ack') {
+                console.info('[Sender] Received transfer_ack via DataChannel.');
+                isCompletedRef.current = true;
+                setErrorMessage(null);
+                setTransferState('COMPLETED');
+                setStep('completed');
+              }
+            } catch {}
+          }
+        };
+
+        dataChannel.addEventListener('message', onChannelMessage);
+
         dataChannel.onopen = () => {
           console.info('[Sender] DataChannel opened!');
           if (disconnectTimeoutRef.current !== null) {
@@ -148,41 +176,16 @@ export const Send: React.FC<SendProps> = ({ onBack }) => {
           const fileToStream = selectedFileRef.current;
           if (!fileToStream) return;
 
-          // Notify receiver that sender DataChannel is open
+          // Notify receiver that sender DataChannel is ready
           try {
             dataChannel.send(JSON.stringify({ type: 'sender_ready' }));
           } catch {}
 
-          // Fallback: start streaming after 2.5s if receiver_ready is delayed
-          const readyFallbackTimer = window.setTimeout(() => {
-            if (!isStreamingRef.current && !isCompletedRef.current && dataChannel.readyState === 'open') {
-              console.info('[Sender] Fallback timer elapsed. Starting stream to receiver.');
-              startStreaming(fileToStream, dataChannel);
-            }
-          }, 2500);
-
-          const onChannelMessage = (event: MessageEvent) => {
-            if (typeof event.data === 'string') {
-              try {
-                const data = JSON.parse(event.data);
-                if (data.type === 'receiver_ready') {
-                  console.info('[Sender] Received receiver_ready! Beginning stream.');
-                  window.clearTimeout(readyFallbackTimer);
-                  if (!isStreamingRef.current) {
-                    startStreaming(fileToStream, dataChannel);
-                  }
-                } else if (data.type === 'transfer_ack') {
-                  console.info('[Sender] Received transfer_ack via DataChannel.');
-                  isCompletedRef.current = true;
-                  setErrorMessage(null);
-                  setTransferState('COMPLETED');
-                  setStep('completed');
-                }
-              } catch {}
-            }
-          };
-
-          dataChannel.addEventListener('message', onChannelMessage);
+          // Start streaming immediately! WebRTC SCTP channel is open and reliable.
+          if (!isStreamingRef.current) {
+            console.info('[Sender] DataChannel open. Initiating immediate stream.');
+            startStreaming(fileToStream, dataChannel);
+          }
         };
 
         dataChannel.onerror = (err) => {
@@ -202,27 +205,46 @@ export const Send: React.FC<SendProps> = ({ onBack }) => {
         console.info('[Sender Signaling Rx]:', msg.type);
 
         if (msg.type === 'peer-joined' || msg.type === 'request-offer') {
-          // If already connected and data channel is open, don't renegotiate
-          if (webrtcRef.current?.isDataChannelOpen() && webrtcRef.current?.pc?.signalingState === 'stable') {
-            console.info('[Sender] DataChannel is already open and stable. Ignoring redundant offer request.');
+          // If already streaming, completed, or data channel is open, ignore
+          if (isCompletedRef.current || (webrtcRef.current?.isDataChannelOpen() && webrtcRef.current?.pc?.signalingState === 'stable')) {
+            console.info('[Sender] Connection is already active. Ignoring redundant offer trigger.');
             return;
           }
-          // If already waiting for answer on pending offer, reuse existing offer
+
+          // If currently creating offer, prevent concurrent collision
+          if (isOfferingRef.current) {
+            console.info('[Sender] Offer creation already in progress. Ignoring concurrent trigger.');
+            return;
+          }
+
+          // If offer was already sent and is waiting for answer
           if (webrtcRef.current?.pc?.signalingState === 'have-local-offer') {
-            console.info('[Sender] Already have pending local offer. Resending existing offer.');
+            const timeSinceOffer = Date.now() - offerSentAtRef.current;
+            if (timeSinceOffer < 4000) {
+              console.info(`[Sender] Offer sent ${timeSinceOffer}ms ago, waiting for answer.`);
+              return;
+            }
+            console.info('[Sender] Offer timed out waiting for answer, resending local offer.');
             if (webrtcRef.current.pc.localDescription) {
               signaling.sendOffer(webrtcRef.current.pc.localDescription);
+              offerSentAtRef.current = Date.now();
             }
             return;
           }
 
-          setTransferState('SIGNALING');
-          try {
-            const offer = await webrtc.createOffer();
-            signaling.sendOffer(offer);
-            setTransferState('CONNECTING');
-          } catch (err: any) {
-            console.warn('[Sender] Offer creation note:', err.message);
+          if (webrtcRef.current?.pc?.signalingState === 'stable') {
+            isOfferingRef.current = true;
+            setTransferState('SIGNALING');
+            try {
+              const offer = await webrtc.createOffer();
+              offerSentAtRef.current = Date.now();
+              signaling.sendOffer(offer);
+              setTransferState('CONNECTING');
+            } catch (err: any) {
+              console.warn('[Sender] Offer creation note:', err.message);
+            } finally {
+              isOfferingRef.current = false;
+            }
           }
         } else if (msg.type === 'answer') {
           try {

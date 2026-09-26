@@ -34,6 +34,7 @@ export const Receive: React.FC<ReceiveProps> = ({ onBack }) => {
   const isCompletedRef = useRef<boolean>(false);
   const isJoiningRef = useRef<boolean>(false);
   const disconnectTimeoutRef = useRef<number | null>(null);
+  const hasAnsweredRef = useRef<boolean>(false);
 
   useEffect(() => {
     // Read ?otp= or ?code= from URL parameters if present
@@ -54,6 +55,7 @@ export const Receive: React.FC<ReceiveProps> = ({ onBack }) => {
       disconnectTimeoutRef.current = null;
     }
     isJoiningRef.current = false;
+    hasAnsweredRef.current = false;
     if (fileReceiverRef.current) {
       fileReceiverRef.current.cancel();
       fileReceiverRef.current = null;
@@ -76,6 +78,7 @@ export const Receive: React.FC<ReceiveProps> = ({ onBack }) => {
     setIsLoading(true);
     setErrorMessage(null);
     isCompletedRef.current = false;
+    hasAnsweredRef.current = false;
     setOtp(cleanOtp);
 
     let offerTimeout: any = null;
@@ -162,7 +165,6 @@ export const Receive: React.FC<ReceiveProps> = ({ onBack }) => {
             setErrorMessage('DataChannel encountered an error.');
           };
 
-          let pingCount = 0;
           const sendReady = () => {
             if (dataChannel.readyState === 'open') {
               try {
@@ -180,18 +182,8 @@ export const Receive: React.FC<ReceiveProps> = ({ onBack }) => {
             };
           }
 
-          const readyInterval = window.setInterval(() => {
-            if (isCompletedRef.current || pingCount > 10) {
-              window.clearInterval(readyInterval);
-              return;
-            }
-            pingCount++;
-            sendReady();
-          }, 350);
-
           const receiver = new FileReceiver(dataChannel, {
             onMetadata: (meta) => {
-              window.clearInterval(readyInterval);
               setFileName(meta.name);
               setFileSize(meta.size);
             },
@@ -202,7 +194,6 @@ export const Receive: React.FC<ReceiveProps> = ({ onBack }) => {
               }
             },
             onComplete: (url, hashVerified, hash) => {
-              window.clearInterval(readyInterval);
               isCompletedRef.current = true;
               setErrorMessage(null);
               if (url) setDownloadUrl(url);
@@ -217,7 +208,6 @@ export const Receive: React.FC<ReceiveProps> = ({ onBack }) => {
               // Gracefully maintain connection so file download completes without network aborts
             },
             onError: (err) => {
-              window.clearInterval(readyInterval);
               if (!isCompletedRef.current) {
                 setErrorMessage(err);
                 setTransferState('FAILED');
@@ -236,13 +226,17 @@ export const Receive: React.FC<ReceiveProps> = ({ onBack }) => {
 
         if (msg.type === 'offer') {
           if (offerTimeout) clearTimeout(offerTimeout);
-          if (webrtcRef.current?.isDataChannelOpen() && webrtcRef.current?.pc?.signalingState === 'stable') {
-            console.info('[Receiver] DataChannel is already open and stable. Ignoring redundant offer.');
+
+          // If already answered an offer and connection is active or stable, ignore redundant offers
+          if (hasAnsweredRef.current && (webrtcRef.current?.isDataChannelOpen() || webrtcRef.current?.pc?.signalingState === 'stable')) {
+            console.info('[Receiver] Already answered offer. Ignoring redundant offer.');
             return;
           }
+
           setTransferState('CONNECTING');
           try {
             const answer = await webrtc.handleOffer(msg.payload);
+            hasAnsweredRef.current = true;
             signaling.sendAnswer(answer);
           } catch (err: any) {
             console.warn('[Receiver] Harmless offer handling note:', err.message);
@@ -283,15 +277,15 @@ export const Receive: React.FC<ReceiveProps> = ({ onBack }) => {
       });
 
       await signaling.connect();
-      // Instantly request offer from sender to activate sharing immediately
-      signaling.sendRequestOffer();
 
-      offerTimeout = setTimeout(() => {
-        if (!isCompletedRef.current && webrtcRef.current && !webrtcRef.current.isDataChannelOpen()) {
-          console.info('[Receiver] Retrying request-offer fallback...');
+      // The backend WebSocket automatically notifies the sender via peer-joined upon receiver connection.
+      // Set a 4-second safety fallback: only request offer if sender hasn't sent one within 4s.
+      offerTimeout = window.setTimeout(() => {
+        if (!isCompletedRef.current && webrtcRef.current && !webrtcRef.current.isDataChannelOpen() && !hasAnsweredRef.current) {
+          console.info('[Receiver] Offer not received within 4s. Requesting offer from sender fallback...');
           signaling.sendRequestOffer();
         }
-      }, 2000);
+      }, 4000);
     } catch (err: any) {
       setErrorMessage(err.message || 'Verification or connection failed.');
       setStep('join');
