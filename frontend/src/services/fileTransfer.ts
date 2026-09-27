@@ -165,8 +165,12 @@ export class FileSender {
       }
 
       if (this.dataChannel.readyState !== 'open') {
-        this.callbacks.onError('DataChannel closed during file transfer.');
-        return;
+        // Allow a brief 200ms grace period in case the channel is momentarily renegotiating
+        await new Promise((r) => setTimeout(r, 200));
+        if ((this.dataChannel.readyState as string) !== 'open') {
+          this.callbacks.onError('DataChannel closed during file transfer.');
+          return;
+        }
       }
 
       // STRICT BACKPRESSURE: Wait until the buffer has drained below LOW_WATER_MARK
@@ -174,9 +178,17 @@ export class FileSender {
       while (this.dataChannel.bufferedAmount > HIGH_WATER_MARK) {
         await this.waitForBufferDrain();
 
-        if (this.isCancelled || this.dataChannel.readyState !== 'open') {
-          this.callbacks.onError('Transfer interrupted.');
+        if (this.isCancelled) {
+          this.callbacks.onError('Transfer cancelled by sender.');
           return;
+        }
+
+        if (this.dataChannel.readyState !== 'open') {
+          await new Promise((r) => setTimeout(r, 300));
+          if ((this.dataChannel.readyState as string) !== 'open') {
+            this.callbacks.onError('Transfer interrupted.');
+            return;
+          }
         }
       }
 
@@ -187,8 +199,8 @@ export class FileSender {
       this.dataChannel.send(arrayBuffer);
       this.bytesSent += arrayBuffer.byteLength;
 
-      // Yield event loop every 8 slices (~512 KB) so browser handles I/O and keepalives without timer throttling
-      if ((offset / SCTP_SLICE_SIZE) % 8 === 0) {
+      // Yield event loop every 4 slices (~256 KB) so browser handles I/O, WebRTC keepalives and consent freshness
+      if ((offset / SCTP_SLICE_SIZE) % 4 === 0) {
         await this.yieldEventLoop();
       }
 
@@ -289,6 +301,7 @@ export class FileSender {
       const cleanup = () => {
         if (!isDone) {
           isDone = true;
+          if (timeoutTimer) clearTimeout(timeoutTimer);
           try {
             if (this.dataChannel) {
               this.dataChannel.removeEventListener('bufferedamountlow', onBufferedAmountLow);
@@ -306,7 +319,6 @@ export class FileSender {
         this.dataChannel.addEventListener('bufferedamountlow', onBufferedAmountLow);
       } catch {}
 
-      // Fast poll backup timer to detect drain if event was missed or delayed by browser
       const pollTimer = setInterval(() => {
         // Continuously update progress as bytes drain out over the wire
         this.emitProgress();
@@ -320,6 +332,11 @@ export class FileSender {
           cleanup();
         }
       }, 20);
+
+      const timeoutTimer = setTimeout(() => {
+        console.warn('[FileSender] Buffer drain wait timeout reached, continuing flow.');
+        cleanup();
+      }, 30000);
     });
   }
 

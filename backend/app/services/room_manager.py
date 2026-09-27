@@ -285,8 +285,10 @@ class RoomManager:
         async with self._lock:
             for room_id, session in self._rooms.items():
                 if not session.is_destroyed and session.expires_at <= now:
-                    # Never evict a room where active transfer is in progress
+                    # Never evict a room where active transfer is in progress or connections are alive
                     if session.state in (SessionState.TRANSFERRING, SessionState.CONNECTED):
+                        continue
+                    if self._connections.get(room_id):
                         continue
                     expired_ids.append(room_id)
 

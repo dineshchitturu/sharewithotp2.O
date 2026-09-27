@@ -38,6 +38,8 @@ export class WebRTCManager {
           stunServer,
           'stun:stun1.l.google.com:19302',
           'stun:stun2.l.google.com:19302',
+          'stun:stun3.l.google.com:19302',
+          'stun:stun4.l.google.com:19302',
           'stun:stun.cloudflare.com:3478',
         ],
       },
@@ -203,6 +205,18 @@ export class WebRTCManager {
 
   public getLocalCandidates(): RTCIceCandidateInit[] {
     return [...this.localIceCandidates];
+  }
+
+  public resendLocalCandidates(sendFn: (candidate: RTCIceCandidateInit) => void): void {
+    for (const cand of this.localIceCandidates) {
+      try {
+        if (cand && (cand.candidate || cand.candidate === '')) {
+          sendFn(cand);
+        }
+      } catch (err) {
+        console.warn('[WebRTC] Error resending local candidate:', err);
+      }
+    }
   }
 
   public close(): void {

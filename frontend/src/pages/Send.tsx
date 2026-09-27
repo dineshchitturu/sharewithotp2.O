@@ -99,11 +99,11 @@ export const Send: React.FC<SendProps> = ({ onBack }) => {
             setTransferState(isStreamingRef.current ? 'TRANSFERRING' : 'CONNECTED');
           } else if (state === 'disconnected') {
             if (isCompletedRef.current) return;
-            // WebRTC 'disconnected' is transient. Debounce 8s before declaring error.
+            // WebRTC 'disconnected' is transient. Debounce 10s before declaring error.
             if (disconnectTimeoutRef.current !== null) {
               window.clearTimeout(disconnectTimeoutRef.current);
             }
-            console.warn('[Sender] WebRTC transiently disconnected. Waiting 8s for potential reconnection...');
+            console.warn('[Sender] WebRTC transiently disconnected. Waiting 10s for potential reconnection...');
             disconnectTimeoutRef.current = window.setTimeout(() => {
               if (isCompletedRef.current) return;
               if (webrtcRef.current?.isDataChannelOpen()) {
@@ -112,13 +112,14 @@ export const Send: React.FC<SendProps> = ({ onBack }) => {
               }
               setTransferState('DISCONNECTED');
               setErrorMessage('Peer connection disconnected. Please check connection and try again.');
-            }, 8000);
+            }, 10000);
           } else if (state === 'failed') {
             if (isCompletedRef.current) return;
             console.warn('[Sender] WebRTC connection failed. Attempting ICE restart...');
             webrtcRef.current?.restartIce().then((offer) => {
-              if (offer && signalingRef.current?.isConnected()) {
+              if (offer && signalingRef.current) {
                 signalingRef.current.sendOffer(offer);
+                webrtcRef.current?.resendLocalCandidates((c) => signalingRef.current?.sendCandidate(c));
               }
             }).catch(() => {});
 
@@ -130,7 +131,7 @@ export const Send: React.FC<SendProps> = ({ onBack }) => {
                 setTransferState('DISCONNECTED');
                 setErrorMessage('Peer connection failed. Could not establish direct P2P connection.');
               }
-            }, 8000);
+            }, 10000);
           }
         }
       );
@@ -183,6 +184,9 @@ export const Send: React.FC<SendProps> = ({ onBack }) => {
           }
           setErrorMessage(null);
           setTransferState('CONNECTED');
+          if (signalingRef.current?.isConnected()) {
+            signalingRef.current.sendStateUpdate('CONNECTED');
+          }
 
           // Notify receiver that sender DataChannel is ready
           try {
@@ -229,9 +233,10 @@ export const Send: React.FC<SendProps> = ({ onBack }) => {
 
           // If already waiting for answer on pending offer, reuse existing offer
           if (webrtcRef.current?.pc?.signalingState === 'have-local-offer') {
-            console.info('[Sender] Already have pending local offer. Resending existing offer.');
+            console.info('[Sender] Already have pending local offer. Resending existing offer & candidates.');
             if (webrtcRef.current.pc.localDescription) {
               signaling.sendOffer(webrtcRef.current.pc.localDescription);
+              webrtcRef.current.resendLocalCandidates((c) => signaling.sendCandidate(c));
             }
             return;
           }
@@ -242,6 +247,8 @@ export const Send: React.FC<SendProps> = ({ onBack }) => {
             try {
               const offer = await webrtc.createOffer();
               signaling.sendOffer(offer);
+              // CRITICAL: Immediately send all gathered local host and STUN candidates!
+              webrtc.resendLocalCandidates((c) => signaling.sendCandidate(c));
               setTransferState('CONNECTING');
             } catch (err: any) {
               console.warn('[Sender] Offer creation note:', err.message);
@@ -252,6 +259,7 @@ export const Send: React.FC<SendProps> = ({ onBack }) => {
         } else if (msg.type === 'answer') {
           try {
             await webrtc.handleAnswer(msg.payload);
+            webrtc.resendLocalCandidates((c) => signaling.sendCandidate(c));
           } catch (err: any) {
             console.warn('[Sender] Harmless answer handling note:', err.message);
           }
@@ -273,16 +281,17 @@ export const Send: React.FC<SendProps> = ({ onBack }) => {
           }
         } else if (msg.type === 'peer-left') {
           if (!isCompletedRef.current) {
-            // If DataChannel is still open and actively streaming, don't abort immediately
-            if (isStreamingRef.current && webrtcRef.current?.isDataChannelOpen()) {
-              console.warn('[Sender] Peer left signaling server, but P2P DataChannel is still streaming.');
+            // CRITICAL: WebRTC DataChannel is direct peer-to-peer!
+            // If actively streaming or DataChannel is open, signaling WebSocket drops must NEVER abort the transfer!
+            if (isStreamingRef.current || webrtcRef.current?.isDataChannelOpen()) {
+              console.info('[Sender] Peer left signaling server, but direct P2P DataChannel is active. Continuing transfer.');
               return;
             }
             setTransferState('DISCONNECTED');
             setErrorMessage('Receiver disconnected from the room.');
           }
         } else if (msg.type === 'error') {
-          if (!isCompletedRef.current && !isStreamingRef.current) {
+          if (!isCompletedRef.current && !isStreamingRef.current && !webrtcRef.current?.isDataChannelOpen()) {
             setErrorMessage(msg.message || 'Signaling error occurred.');
           }
         }
@@ -301,6 +310,9 @@ export const Send: React.FC<SendProps> = ({ onBack }) => {
     isStreamingRef.current = true;
     setStep('transferring');
     setTransferState('TRANSFERRING');
+    if (signalingRef.current?.isConnected()) {
+      signalingRef.current.sendStateUpdate('TRANSFERRING');
+    }
 
     const sender = new FileSender(channel, {
       onProgress: (prog) => {

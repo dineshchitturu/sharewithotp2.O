@@ -16,6 +16,8 @@ export class SignalingClient {
   private role: 'sender' | 'receiver';
   private token: string;
 
+  private pendingOutgoing: string[] = [];
+
   constructor(
     roomId: string,
     role: 'sender' | 'receiver',
@@ -55,6 +57,17 @@ export class SignalingClient {
       this.ws.onopen = () => {
         this.reconnectAttempts = 0;
         this.startHeartbeat();
+        // Flush all queued messages immediately so early ICE candidates and offers are never lost
+        while (this.pendingOutgoing.length > 0) {
+          const queued = this.pendingOutgoing.shift();
+          if (queued && this.ws && this.ws.readyState === WebSocket.OPEN) {
+            try {
+              this.ws.send(queued);
+            } catch (err) {
+              console.warn('[Signaling] Failed to flush queued message:', err);
+            }
+          }
+        }
         resolve();
       };
 
@@ -120,10 +133,21 @@ export class SignalingClient {
   }
 
   public sendMessage(msg: SignalingMessage) {
+    const payloadStr = JSON.stringify(msg);
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify(msg));
+      try {
+        this.ws.send(payloadStr);
+      } catch (err) {
+        console.warn('[Signaling] Failed to send over open WebSocket, queueing:', err);
+        if (this.pendingOutgoing.length < 200) {
+          this.pendingOutgoing.push(payloadStr);
+        }
+      }
     } else {
-      console.warn('[Signaling] Cannot send message, WebSocket not open.');
+      console.info(`[Signaling] WebSocket not yet open (readyState=${this.ws?.readyState ?? 'null'}). Queuing '${msg.type}' message.`);
+      if (this.pendingOutgoing.length < 200) {
+        this.pendingOutgoing.push(payloadStr);
+      }
     }
   }
 
@@ -183,6 +207,7 @@ export class SignalingClient {
       this.ws.close();
       this.ws = null;
     }
+    this.pendingOutgoing = [];
     this.handlers.clear();
   }
 }

@@ -219,9 +219,10 @@ export const UnifiedTransferPage: FC = () => {
             return;
           }
           if (webrtcRef.current?.pc?.signalingState === 'have-local-offer') {
-            console.info('[Unified] Already have pending local offer. Resending existing offer.');
+            console.info('[Unified] Already have pending local offer. Resending existing offer & candidates.');
             if (webrtcRef.current.pc.localDescription) {
               signaling.sendOffer(webrtcRef.current.pc.localDescription);
+              webrtcRef.current.resendLocalCandidates((c) => signaling.sendCandidate(c));
             }
             return;
           }
@@ -230,6 +231,7 @@ export const UnifiedTransferPage: FC = () => {
           try {
             const offer = await webrtc.createOffer();
             signaling.sendOffer(offer);
+            webrtc.resendLocalCandidates((c) => signaling.sendCandidate(c));
             setTransferState('CONNECTING');
           } catch (err: any) {
             console.warn('[Unified] Offer creation note:', err.message);
@@ -237,6 +239,7 @@ export const UnifiedTransferPage: FC = () => {
         } else if (msg.type === 'answer') {
           try {
             await webrtc.handleAnswer(msg.payload);
+            webrtc.resendLocalCandidates((c) => signaling.sendCandidate(c));
           } catch (err: any) {
             console.warn('[Unified] Harmless answer handling note:', err.message);
           }
@@ -258,6 +261,11 @@ export const UnifiedTransferPage: FC = () => {
           }
         } else if (msg.type === 'peer-left') {
           if (!isCompletedRef.current) {
+            // If actively streaming or DataChannel is open, don't abort
+            if (isStreamingRef.current || webrtcRef.current?.isDataChannelOpen()) {
+              console.info('[Unified Sender] Peer left signaling server, but direct P2P DataChannel is active. Continuing transfer.');
+              return;
+            }
             setTransferState('DISCONNECTED');
             setErrorMessage('Receiver disconnected from the session.');
           }
@@ -295,6 +303,9 @@ export const UnifiedTransferPage: FC = () => {
     isStreamingRef.current = true;
     setSenderStep('transferring');
     setTransferState('TRANSFERRING');
+    if (signalingRef.current?.isConnected()) {
+      signalingRef.current.sendStateUpdate('TRANSFERRING');
+    }
 
     const sender = new FileSender(channel, {
       onProgress: (prog) => {
@@ -444,6 +455,7 @@ export const UnifiedTransferPage: FC = () => {
           try {
             const answer = await webrtc.handleOffer(msg.payload);
             signaling.sendAnswer(answer);
+            webrtc.resendLocalCandidates((c) => signaling.sendCandidate(c));
           } catch (err: any) {
             setErrorMessage(`Failed to handle offer: ${err.message}`);
           }
@@ -466,6 +478,10 @@ export const UnifiedTransferPage: FC = () => {
           }
         } else if (msg.type === 'peer-left') {
           if (!isCompletedRef.current) {
+            if (receiverStep === 'transferring' || webrtcRef.current?.isDataChannelOpen()) {
+              console.info('[Unified Receiver] Peer left signaling server, but direct P2P DataChannel is active. Continuing transfer.');
+              return;
+            }
             setTransferState('DISCONNECTED');
             setErrorMessage('Sender disconnected.');
           }

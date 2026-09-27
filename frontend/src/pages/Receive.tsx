@@ -121,11 +121,11 @@ export const Receive: React.FC<ReceiveProps> = ({ onBack }) => {
             setTransferState(step === 'transferring' ? 'TRANSFERRING' : 'CONNECTED');
           } else if (state === 'disconnected') {
             if (isCompletedRef.current) return;
-            // WebRTC 'disconnected' is transient. Debounce 8s before declaring error.
+            // WebRTC 'disconnected' is transient. Debounce 10s before declaring error.
             if (disconnectTimeoutRef.current !== null) {
               window.clearTimeout(disconnectTimeoutRef.current);
             }
-            console.warn('[Receiver] WebRTC transiently disconnected. Waiting 8s for potential reconnection...');
+            console.warn('[Receiver] WebRTC transiently disconnected. Waiting 10s for potential reconnection...');
             disconnectTimeoutRef.current = window.setTimeout(() => {
               if (isCompletedRef.current) return;
               if (webrtcRef.current?.isDataChannelOpen()) {
@@ -134,7 +134,7 @@ export const Receive: React.FC<ReceiveProps> = ({ onBack }) => {
               }
               setTransferState('DISCONNECTED');
               setErrorMessage('Peer connection disconnected. Please check your connection.');
-            }, 8000);
+            }, 10000);
           } else if (state === 'failed') {
             if (isCompletedRef.current) return;
             if (disconnectTimeoutRef.current !== null) {
@@ -145,7 +145,7 @@ export const Receive: React.FC<ReceiveProps> = ({ onBack }) => {
                 setTransferState('DISCONNECTED');
                 setErrorMessage('Peer connection failed. Could not establish direct P2P connection.');
               }
-            }, 8000);
+            }, 10000);
           }
         },
         (dataChannel) => {
@@ -254,21 +254,21 @@ export const Receive: React.FC<ReceiveProps> = ({ onBack }) => {
         if (msg.type === 'offer') {
           if (offerTimeout) clearTimeout(offerTimeout);
 
-          // If already answered an offer and connection is active or stable, ignore redundant offers
-          if (hasAnsweredRef.current && (webrtcRef.current?.isDataChannelOpen() || webrtcRef.current?.pc?.signalingState === 'stable')) {
-            console.info('[Receiver] Already answered offer. Ignoring redundant offer.');
+          // Detect if this is an ICE restart offer
+          const isIceRestart = msg.payload?.sdp?.includes('ice-restart') || webrtcRef.current?.pc?.signalingState !== 'stable';
+
+          // If already answered an initial offer and connection is active and NOT an ICE restart, ignore redundant offer
+          if (hasAnsweredRef.current && !isIceRestart && webrtcRef.current?.isDataChannelOpen() && webrtcRef.current?.pc?.signalingState === 'stable') {
+            console.info('[Receiver] Already answered initial offer. Ignoring redundant offer.');
             return;
           }
 
-          setTransferState('CONNECTING');
+          setTransferState(step === 'transferring' ? 'TRANSFERRING' : 'CONNECTING');
           try {
             const answer = await webrtc.handleOffer(msg.payload);
             hasAnsweredRef.current = true;
             signaling.sendAnswer(answer);
-            const candidates = webrtc.getLocalCandidates();
-            for (const cand of candidates) {
-              signaling.sendCandidate(cand);
-            }
+            webrtc.resendLocalCandidates((cand) => signaling.sendCandidate(cand));
           } catch (err: any) {
             console.warn('[Receiver] Harmless offer handling note:', err.message);
           }
@@ -292,16 +292,17 @@ export const Receive: React.FC<ReceiveProps> = ({ onBack }) => {
           }
         } else if (msg.type === 'peer-left') {
           if (!isCompletedRef.current) {
-            // If data channel is still open and actively streaming, don't abort immediately
-            if (webrtcRef.current?.isDataChannelOpen()) {
-              console.warn('[Receiver] Peer left signaling server, but P2P DataChannel is active.');
+            // CRITICAL: WebRTC DataChannel is direct peer-to-peer!
+            // If actively streaming or DataChannel is open, signaling WebSocket drops must NEVER abort the transfer!
+            if (step === 'transferring' || webrtcRef.current?.isDataChannelOpen()) {
+              console.info('[Receiver] Peer left signaling server, but direct P2P DataChannel is active. Continuing transfer.');
               return;
             }
             setTransferState('DISCONNECTED');
             setErrorMessage('Sender disconnected.');
           }
         } else if (msg.type === 'error') {
-          if (!isCompletedRef.current && !webrtcRef.current?.isDataChannelOpen()) {
+          if (!isCompletedRef.current && !webrtcRef.current?.isDataChannelOpen() && step !== 'transferring') {
             setErrorMessage(msg.message || 'Signaling error occurred.');
           }
         }
