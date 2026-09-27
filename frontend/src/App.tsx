@@ -39,6 +39,7 @@ export function App() {
   });
 
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [activeSection, setActiveSection] = useState<'home' | 'about' | 'how-it-works'>('home');
 
   // Handle in-page smooth scrolling to sections without page navigation
   const scrollToSection = (sectionId: string) => {
@@ -67,6 +68,32 @@ export function App() {
       window.history.pushState(null, '', `#${sectionId}`);
     } catch {}
   };
+
+  // Scroll spy to highlight active nav link on landing page
+  useEffect(() => {
+    if (currentView !== 'home') return;
+
+    const sections = ['home', 'about', 'how-it-works'];
+    const handleScroll = () => {
+      const scrollY = window.scrollY;
+      const headerOffset = 140;
+
+      for (let i = sections.length - 1; i >= 0; i--) {
+        const el = document.getElementById(sections[i]);
+        if (el) {
+          const top = el.offsetTop - headerOffset;
+          if (scrollY >= top) {
+            setActiveSection(sections[i] as any);
+            break;
+          }
+        }
+      }
+    };
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    handleScroll();
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, [currentView]);
 
   // Handle URL hash on initial load
   useEffect(() => {
@@ -125,21 +152,33 @@ export function App() {
           <nav className="hidden md:flex items-center gap-1.5 bg-white/5 border border-white/10 px-3 py-1.5 rounded-full backdrop-blur-md shadow-inner">
             <button
               onClick={() => scrollToSection('home')}
-              className="text-xs font-semibold px-3.5 py-1 rounded-full text-slate-300 hover:text-white hover:bg-white/10 transition-all cursor-pointer"
+              className={`text-xs font-semibold px-3.5 py-1 rounded-full transition-all cursor-pointer ${
+                currentView === 'home' && activeSection === 'home'
+                  ? 'text-cyan-300 bg-white/10 shadow-sm'
+                  : 'text-slate-300 hover:text-white hover:bg-white/10'
+              }`}
             >
               Home
             </button>
 
             <button
               onClick={() => scrollToSection('about')}
-              className="text-xs font-semibold px-3.5 py-1 rounded-full text-slate-300 hover:text-white hover:bg-white/10 transition-all cursor-pointer"
+              className={`text-xs font-semibold px-3.5 py-1 rounded-full transition-all cursor-pointer ${
+                currentView === 'home' && activeSection === 'about'
+                  ? 'text-cyan-300 bg-white/10 shadow-sm'
+                  : 'text-slate-300 hover:text-white hover:bg-white/10'
+              }`}
             >
               About
             </button>
 
             <button
               onClick={() => scrollToSection('how-it-works')}
-              className="text-xs font-semibold px-3.5 py-1 rounded-full text-slate-300 hover:text-white hover:bg-white/10 transition-all cursor-pointer"
+              className={`text-xs font-semibold px-3.5 py-1 rounded-full transition-all cursor-pointer ${
+                currentView === 'home' && activeSection === 'how-it-works'
+                  ? 'text-cyan-300 bg-white/10 shadow-sm'
+                  : 'text-slate-300 hover:text-white hover:bg-white/10'
+              }`}
             >
               How It Works
             </button>
@@ -198,19 +237,31 @@ export function App() {
             <div className="flex flex-col space-y-1">
               <button
                 onClick={() => scrollToSection('home')}
-                className="w-full text-left px-3.5 py-2.5 rounded-xl text-sm font-medium text-slate-200 hover:bg-white/10 hover:text-white transition-colors"
+                className={`w-full text-left px-3.5 py-2.5 rounded-xl text-sm font-medium transition-colors ${
+                  currentView === 'home' && activeSection === 'home'
+                    ? 'text-cyan-300 bg-white/10'
+                    : 'text-slate-200 hover:bg-white/10 hover:text-white'
+                }`}
               >
                 Home
               </button>
               <button
                 onClick={() => scrollToSection('about')}
-                className="w-full text-left px-3.5 py-2.5 rounded-xl text-sm font-medium text-slate-200 hover:bg-white/10 hover:text-white transition-colors"
+                className={`w-full text-left px-3.5 py-2.5 rounded-xl text-sm font-medium transition-colors ${
+                  currentView === 'home' && activeSection === 'about'
+                    ? 'text-cyan-300 bg-white/10'
+                    : 'text-slate-200 hover:bg-white/10 hover:text-white'
+                }`}
               >
                 About
               </button>
               <button
                 onClick={() => scrollToSection('how-it-works')}
-                className="w-full text-left px-3.5 py-2.5 rounded-xl text-sm font-medium text-slate-200 hover:bg-white/10 hover:text-white transition-colors"
+                className={`w-full text-left px-3.5 py-2.5 rounded-xl text-sm font-medium transition-colors ${
+                  currentView === 'home' && activeSection === 'how-it-works'
+                    ? 'text-cyan-300 bg-white/10'
+                    : 'text-slate-200 hover:bg-white/10 hover:text-white'
+                }`}
               >
                 How It Works
               </button>

@@ -76,7 +76,7 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
       {/* SECTION 1: MASTERPIECE OCEAN GLASS HERO CONTAINER        */}
       {/* (Faithfully recreating the 2nd Reference Image)          */}
       {/* ======================================================== */}
-      <section id="home" className="scroll-mt-24">
+      <section id="home" className="scroll-mt-20">
         {/* Giant Panoramic Curved Glass Container */}
         <div className="relative rounded-[32px] sm:rounded-[36px] glass-panel border border-white/15 p-6 sm:p-10 md:p-12 shadow-[0_24px_50px_-12px_rgba(0,0,0,0.7),0_0_40px_rgba(6,182,212,0.15)] overflow-hidden mb-8">
           {/* Subtle underwater caustic gradient overlay */}
@@ -245,7 +245,7 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
       {/* ======================================================== */}
       {/* SECTION 2: ABOUT SECTION (#about)                        */}
       {/* ======================================================== */}
-      <section id="about" className="scroll-mt-24 border-t border-white/10 pt-16">
+      <section id="about" className="scroll-mt-20 border-t border-white/10 pt-16">
         <div className="text-center mb-10">
           <div className="inline-flex items-center gap-2 mb-3">
             <span className="badge-luminous-pill">
@@ -277,21 +277,14 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-2">
                 <div>
                   <h3 className="text-2xl font-bold text-white tracking-tight">Dinesh Chitturu</h3>
-                  {/* <p className="text-xs font-semibold text-cyan-400">Creator & Systems Developer</p> */}
-                  <p> 
-
-                  </p>
+                  <p className="text-xs font-semibold text-cyan-400">Systems & Distributed Web Developer</p>
                 </div>
 
                 <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-950/50 border border-emerald-500/30 text-[11px] text-emerald-300 font-mono self-center sm:self-auto shadow-sm">
-                  {/* <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" /> */}
-                  {/* <span>Online & Active</span> */}
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                  <span>Online & Active</span>
                 </div>
               </div>
-
-              {/* <p className="text-xs sm:text-sm text-slate-300 leading-relaxed mb-4 max-w-xl">
-                Passionate about privacy-preserving architectures, real-time distributed protocols, and zero-knowledge data pipelines.
-              </p> */}
 
               {/* Contact & Social Links */}
               <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2.5">
@@ -355,9 +348,9 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
             <div className="w-10 h-10 rounded-xl bg-indigo-950/60 border border-indigo-500/30 text-indigo-400 flex items-center justify-center mb-4 shadow-md">
               <Cpu className="w-5 h-5" />
             </div>
-            <h4 className="font-bold text-white text-base mb-2">1 MB Chunking & Slicing</h4>
+            <h4 className="font-bold text-white text-base mb-2">Streaming SHA-256 Checksum</h4>
             <p className="text-xs text-slate-400 leading-relaxed">
-              High-speed standard 1 MB chunking with safe 63 KB SCTP transport slicing ensures smooth transmission across Wi-Fi and mobile networks.
+              Both peers compute cryptographic SHA-256 digests in real-time via WebAssembly to verify byte-level integrity prior to receiver download.
             </p>
           </div>
         </div>
@@ -366,7 +359,7 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
       {/* ======================================================== */}
       {/* SECTION 3: HOW IT WORKS SECTION (#how-it-works)          */}
       {/* ======================================================== */}
-      <section id="how-it-works" className="scroll-mt-24 border-t border-white/10 pt-16">
+      <section id="how-it-works" className="scroll-mt-20 border-t border-white/10 pt-16">
         <div className="text-center mb-12">
           <div className="inline-flex items-center gap-2 mb-3">
             <span className="badge-luminous-pill">
