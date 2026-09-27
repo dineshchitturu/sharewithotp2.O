@@ -2,9 +2,9 @@ import type { FileMetadata, TransferProgress } from '../types/transfer';
 
 // Chunk size configuration (1 MB standard chunking with safe SCTP transport slicing)
 export const DEFAULT_CHUNK_SIZE = 1024 * 1024; // 1 MB
-export const HIGH_WATER_MARK = 512 * 1024; // 512 KB backpressure threshold (prevents bufferbloat)
-export const LOW_WATER_MARK = 128 * 1024; // 128 KB resume threshold
-export const SCTP_SLICE_SIZE = 32 * 1024; // 32 KB safe cross-browser transport slice
+export const HIGH_WATER_MARK = 2 * 1024 * 1024; // 2 MB backpressure threshold (high headroom for real-world networks)
+export const LOW_WATER_MARK = 512 * 1024; // 512 KB resume threshold
+export const SCTP_SLICE_SIZE = 64 * 1024 - 1024; // 63 KB (64,512 bytes) safe cross-browser transport slice
 
 export interface TransferCallbacks {
   onMetadata?: (metadata: FileMetadata) => void;
@@ -21,6 +21,8 @@ export class FileSender {
   private totalBytes: number = 0;
   private totalChunks: number = 0;
   private currentMetadata: FileMetadata | null = null;
+  private lastProgressTime: number = 0;
+  private lastReportedNetBytes: number = 0;
 
   constructor(
     dataChannel: RTCDataChannel,
@@ -54,10 +56,46 @@ export class FileSender {
     this.isCancelled = true;
   }
 
+  private emitProgress(bytesTransferred: number, chunkIndex: number, force: boolean = false): void {
+    const now = performance.now();
+    const timeDeltaSec = (now - this.lastProgressTime) / 1000;
+
+    if (!force && timeDeltaSec < 0.15) {
+      return;
+    }
+
+    const buffered = this.dataChannel?.bufferedAmount || 0;
+    const netBytes = Math.max(0, bytesTransferred - buffered);
+    const deltaBytes = Math.max(0, netBytes - this.lastReportedNetBytes);
+    const currentSpeed = deltaBytes / (timeDeltaSec || 0.001);
+    const remainingBytes = Math.max(0, this.totalBytes - netBytes);
+    const remainingSeconds = currentSpeed > 0 ? remainingBytes / currentSpeed : 0;
+    const percentage = Math.min(99, Math.round((netBytes / this.totalBytes) * 100));
+
+    try {
+      this.callbacks.onProgress({
+        bytesTransferred: netBytes,
+        totalBytes: this.totalBytes,
+        percentage,
+        speedBytesPerSec: currentSpeed,
+        remainingSeconds,
+        currentChunk: Math.min(chunkIndex + 1, this.totalChunks),
+        totalChunks: this.totalChunks,
+      });
+    } catch (err) {
+      console.warn('[FileSender] Error in onProgress callback:', err);
+    }
+
+    this.lastProgressTime = now;
+    this.lastReportedNetBytes = netBytes;
+  }
+
   public async sendFile(file: File): Promise<void> {
     this.isCancelled = false;
     this.totalBytes = file.size;
     this.totalChunks = Math.ceil(this.totalBytes / this.chunkSize);
+    this.lastProgressTime = performance.now();
+    this.lastReportedNetBytes = 0;
 
     // 1. Send File Metadata Header
     const metadata: FileMetadata = {
@@ -80,9 +118,6 @@ export class FileSender {
     await new Promise((r) => setTimeout(r, 35));
 
     let bytesTransferred = 0;
-    let lastProgressTime = performance.now();
-    let bytesSinceLastProgress = 0;
-    let currentSpeed = 0;
 
     for (let chunkIndex = 0; chunkIndex < this.totalChunks; chunkIndex++) {
       if (this.isCancelled) {
@@ -103,11 +138,7 @@ export class FileSender {
 
       // Transmit the 1 MB chunk across the data channel via safe SCTP transport slices
       for (let offset = 0; offset < arrayBuffer.byteLength; offset += SCTP_SLICE_SIZE) {
-        while (
-          this.dataChannel.bufferedAmount > HIGH_WATER_MARK &&
-          !this.isCancelled &&
-          this.dataChannel.readyState === 'open'
-        ) {
+        if (this.dataChannel.bufferedAmount > HIGH_WATER_MARK) {
           await this.waitForBufferDrain();
         }
 
@@ -120,63 +151,18 @@ export class FileSender {
         this.dataChannel.send(fragment);
 
         bytesTransferred += fragment.byteLength;
-        bytesSinceLastProgress += fragment.byteLength;
 
-        // Yield event loop every 4 slices (128 KB) so SCTP ACKs and UI rendering process smoothly
+        // Yield event loop every 4 slices (256 KB) so SCTP ACKs and UI rendering process smoothly
         if ((offset / SCTP_SLICE_SIZE) % 4 === 0) {
           await new Promise((r) => setTimeout(r, 0));
         }
 
-        const now = performance.now();
-        const timeDeltaSec = (now - lastProgressTime) / 1000;
-        if (timeDeltaSec >= 0.15) {
-          const netBytes = Math.max(0, bytesTransferred - this.dataChannel.bufferedAmount);
-          currentSpeed = bytesSinceLastProgress / (timeDeltaSec || 0.001);
-          const remainingBytes = Math.max(0, this.totalBytes - netBytes);
-          const remainingSeconds = currentSpeed > 0 ? remainingBytes / currentSpeed : 0;
-          const percentage = Math.min(99, Math.round((netBytes / this.totalBytes) * 100));
-
-          this.callbacks.onProgress({
-            bytesTransferred: netBytes,
-            totalBytes: this.totalBytes,
-            percentage,
-            speedBytesPerSec: currentSpeed,
-            remainingSeconds,
-            currentChunk: chunkIndex + 1,
-            totalChunks: this.totalChunks,
-          });
-
-          lastProgressTime = now;
-          bytesSinceLastProgress = 0;
-        }
+        this.emitProgress(bytesTransferred, chunkIndex);
       }
 
       // Yield event loop after each 1 MB chunk so WebRTC keepalives and UI rendering never stall
       await new Promise((r) => setTimeout(r, 0));
-
-      const now = performance.now();
-      const timeDeltaSec = (now - lastProgressTime) / 1000;
-
-      if (timeDeltaSec >= 0.15 || chunkIndex === this.totalChunks - 1) {
-        const netBytes = Math.max(0, bytesTransferred - this.dataChannel.bufferedAmount);
-        currentSpeed = bytesSinceLastProgress / (timeDeltaSec || 0.001);
-        const remainingBytes = Math.max(0, this.totalBytes - netBytes);
-        const remainingSeconds = currentSpeed > 0 ? remainingBytes / currentSpeed : 0;
-        const percentage = Math.min(99, Math.round((netBytes / this.totalBytes) * 100));
-
-        this.callbacks.onProgress({
-          bytesTransferred: netBytes,
-          totalBytes: this.totalBytes,
-          percentage,
-          speedBytesPerSec: currentSpeed,
-          remainingSeconds,
-          currentChunk: chunkIndex + 1,
-          totalChunks: this.totalChunks,
-        });
-
-        lastProgressTime = now;
-        bytesSinceLastProgress = 0;
-      }
+      this.emitProgress(bytesTransferred, chunkIndex);
     }
 
     // Wait until all chunk bytes have completely drained from SCTP buffer
@@ -303,12 +289,12 @@ export class FileSender {
         ) {
           cleanup();
         }
-      }, 10);
+      }, 15);
 
-      // 500ms safety timeout ensures large transfers never get permanently stuck
+      // 1000ms safety timeout ensures large transfers never get permanently stuck
       const safetyTimer = setTimeout(() => {
         cleanup();
-      }, 500);
+      }, 1000);
     });
   }
 
@@ -491,7 +477,11 @@ export class FileReceiver {
 
     // Flush batch to off-heap Blob slice when threshold reached to prevent V8 heap OOM
     if (this.currentBatchBytes >= this.BATCH_THRESHOLD) {
-      this.blobParts.push(new Blob(this.currentBatch));
+      try {
+        this.blobParts.push(new Blob(this.currentBatch));
+      } catch (err) {
+        console.error('[FileReceiver] Error creating batch Blob:', err);
+      }
       this.currentBatch = [];
       this.currentBatchBytes = 0;
     }
@@ -505,15 +495,19 @@ export class FileReceiver {
       const remainingSeconds = speed > 0 ? remainingBytes / speed : 0;
       const percentage = Math.min(100, Math.round((this.bytesReceived / this.metadata.size) * 100));
 
-      this.callbacks.onProgress({
-        bytesTransferred: this.bytesReceived,
-        totalBytes: this.metadata.size,
-        percentage,
-        speedBytesPerSec: speed,
-        remainingSeconds,
-        currentChunk: Math.ceil(this.bytesReceived / (this.metadata.chunkSize || DEFAULT_CHUNK_SIZE)),
-        totalChunks: this.metadata.totalChunks,
-      });
+      try {
+        this.callbacks.onProgress({
+          bytesTransferred: this.bytesReceived,
+          totalBytes: this.metadata.size,
+          percentage,
+          speedBytesPerSec: speed,
+          remainingSeconds,
+          currentChunk: Math.ceil(this.bytesReceived / (this.metadata.chunkSize || DEFAULT_CHUNK_SIZE)),
+          totalChunks: this.metadata.totalChunks,
+        });
+      } catch (err) {
+        console.warn('[FileReceiver] Error in onProgress callback:', err);
+      }
 
       this.lastProgressTime = now;
       this.bytesSinceLastProgress = 0;
