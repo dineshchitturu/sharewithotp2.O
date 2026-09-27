@@ -68,6 +68,8 @@ export const UnifiedTransferPage: FC = () => {
   const isStreamingRef = useRef<boolean>(false);
   const selectedFileRef = useRef<File | null>(null);
   const isJoiningRef = useRef<boolean>(false);
+  const disconnectTimeoutRef = useRef<number | null>(null);
+  const hasPeerJoinedRef = useRef<boolean>(false);
 
   // Read URL parameters on mount
   useEffect(() => {
@@ -84,8 +86,13 @@ export const UnifiedTransferPage: FC = () => {
   }, []);
 
   const cleanupNetwork = () => {
+    if (disconnectTimeoutRef.current !== null) {
+      window.clearTimeout(disconnectTimeoutRef.current);
+      disconnectTimeoutRef.current = null;
+    }
     isJoiningRef.current = false;
     isStreamingRef.current = false;
+    hasPeerJoinedRef.current = false;
     if (fileSenderRef.current) {
       fileSenderRef.current.cancel();
       fileSenderRef.current = null;
@@ -172,14 +179,47 @@ export const UnifiedTransferPage: FC = () => {
         (state) => {
           console.info('[Sender WebRTC State]:', state);
           if (state === 'connected') {
-            setTransferState('CONNECTED');
-          } else if (state === 'failed') {
-            if (!isCompletedRef.current) {
-              setTransferState('FAILED');
-              setErrorMessage('Direct peer connection failed. Please check network connectivity.');
+            if (disconnectTimeoutRef.current !== null) {
+              window.clearTimeout(disconnectTimeoutRef.current);
+              disconnectTimeoutRef.current = null;
             }
+            setErrorMessage(null);
+            setTransferState('CONNECTED');
           } else if (state === 'disconnected') {
-            console.warn('[Sender WebRTC] Temporary peer disconnect detected.');
+            if (isCompletedRef.current) return;
+            if (disconnectTimeoutRef.current !== null) {
+              window.clearTimeout(disconnectTimeoutRef.current);
+            }
+            if (hasPeerJoinedRef.current) {
+              console.warn('[Sender WebRTC] Temporary peer disconnect detected. Debouncing 10s...');
+              disconnectTimeoutRef.current = window.setTimeout(() => {
+                if (isCompletedRef.current) return;
+                if (webrtcRef.current?.isDataChannelOpen()) return;
+                setTransferState('FAILED');
+                setErrorMessage('Direct peer connection disconnected.');
+              }, 10000);
+            }
+          } else if (state === 'failed') {
+            if (isCompletedRef.current) return;
+            if (hasPeerJoinedRef.current) {
+              console.warn('[Sender WebRTC] Connection failed, attempting ICE restart...');
+              webrtcRef.current?.restartIce().then((offer) => {
+                if (offer && signalingRef.current) {
+                  signalingRef.current.sendOffer(offer);
+                  webrtcRef.current?.resendLocalCandidates((c) => signalingRef.current?.sendCandidate(c));
+                }
+              }).catch(() => {});
+
+              if (disconnectTimeoutRef.current !== null) {
+                window.clearTimeout(disconnectTimeoutRef.current);
+              }
+              disconnectTimeoutRef.current = window.setTimeout(() => {
+                if (!isCompletedRef.current && !webrtcRef.current?.isDataChannelOpen()) {
+                  setTransferState('FAILED');
+                  setErrorMessage('Direct peer connection failed. Please check network connectivity.');
+                }
+              }, 10000);
+            }
           }
         }
       );
@@ -213,6 +253,11 @@ export const UnifiedTransferPage: FC = () => {
       signaling.onMessage(async (msg) => {
         console.info('[Sender Signaling Rx]:', msg.type);
         if (msg.type === 'peer-joined' || msg.type === 'request-offer') {
+          hasPeerJoinedRef.current = true;
+          if (disconnectTimeoutRef.current !== null) {
+            window.clearTimeout(disconnectTimeoutRef.current);
+            disconnectTimeoutRef.current = null;
+          }
           // If already connected and data channel is open, don't renegotiate
           if (webrtcRef.current?.isDataChannelOpen() && webrtcRef.current?.pc?.signalingState === 'stable') {
             console.info('[Unified] DataChannel is already open and stable. Ignoring redundant offer request.');
@@ -377,14 +422,40 @@ export const UnifiedTransferPage: FC = () => {
         (state) => {
           console.info('[Receiver WebRTC State]:', state);
           if (state === 'connected') {
-            setTransferState('CONNECTED');
-          } else if (state === 'failed') {
-            if (!isCompletedRef.current) {
-              setTransferState('FAILED');
-              setErrorMessage('Direct peer connection failed. Please check network connectivity.');
+            if (disconnectTimeoutRef.current !== null) {
+              window.clearTimeout(disconnectTimeoutRef.current);
+              disconnectTimeoutRef.current = null;
             }
+            setErrorMessage(null);
+            setTransferState('CONNECTED');
           } else if (state === 'disconnected') {
-            console.warn('[Receiver WebRTC] Temporary peer disconnect detected.');
+            if (isCompletedRef.current) return;
+            if (disconnectTimeoutRef.current !== null) {
+              window.clearTimeout(disconnectTimeoutRef.current);
+            }
+            console.warn('[Receiver WebRTC] Temporary peer disconnect detected. Debouncing 10s...');
+            disconnectTimeoutRef.current = window.setTimeout(() => {
+              if (isCompletedRef.current) return;
+              if (webrtcRef.current?.isDataChannelOpen()) return;
+              setTransferState('FAILED');
+              setErrorMessage('Direct peer connection disconnected.');
+            }, 10000);
+          } else if (state === 'failed') {
+            if (isCompletedRef.current) return;
+            console.warn('[Receiver WebRTC] Failed, requesting fresh offer from sender...');
+            try {
+              signalingRef.current?.sendMessage({ type: 'request-offer' });
+            } catch {}
+
+            if (disconnectTimeoutRef.current !== null) {
+              window.clearTimeout(disconnectTimeoutRef.current);
+            }
+            disconnectTimeoutRef.current = window.setTimeout(() => {
+              if (!isCompletedRef.current && !webrtcRef.current?.isDataChannelOpen()) {
+                setTransferState('FAILED');
+                setErrorMessage('Direct peer connection failed. Please check network connectivity.');
+              }
+            }, 10000);
           }
         },
         (dataChannel) => {

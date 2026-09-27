@@ -137,6 +137,11 @@ export const Receive: React.FC<ReceiveProps> = ({ onBack }) => {
             }, 10000);
           } else if (state === 'failed') {
             if (isCompletedRef.current) return;
+            console.warn('[Receiver] WebRTC failed. Requesting fresh offer from sender...');
+            try {
+              signalingRef.current?.sendMessage({ type: 'request-offer' });
+            } catch {}
+
             if (disconnectTimeoutRef.current !== null) {
               window.clearTimeout(disconnectTimeoutRef.current);
             }

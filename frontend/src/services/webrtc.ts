@@ -10,6 +10,8 @@ export class WebRTCManager {
   public dataChannel: RTCDataChannel | null = null;
   private pendingIceCandidates: RTCIceCandidateInit[] = [];
   private localIceCandidates: RTCIceCandidateInit[] = [];
+  private seenLocalCandidates: Set<string> = new Set();
+  private seenRemoteCandidates: Set<string> = new Set();
   private hasRemoteDescription: boolean = false;
   private config: WebRTCConfig;
   private onIceCandidate: (candidate: RTCIceCandidateInit) => void;
@@ -26,6 +28,23 @@ export class WebRTCManager {
     this.onIceCandidate = onIceCandidate;
     this.onConnectionStateChange = onConnectionStateChange;
     this.onDataChannelReceived = onDataChannelReceived;
+  }
+
+  private sanitizeCandidate(candidate: RTCIceCandidateInit): RTCIceCandidateInit | null {
+    if (!candidate || (!candidate.candidate && candidate.candidate !== '')) {
+      return null;
+    }
+    const sdpMid = candidate.sdpMid ?? (candidate.sdpMLineIndex != null ? undefined : '0');
+    const sdpMLineIndex = typeof candidate.sdpMLineIndex === 'number'
+      ? candidate.sdpMLineIndex
+      : (candidate.sdpMid != null ? undefined : 0);
+
+    return {
+      candidate: candidate.candidate,
+      sdpMid,
+      sdpMLineIndex,
+      usernameFragment: candidate.usernameFragment,
+    };
   }
 
   public initialize(isInitiator: boolean): RTCPeerConnection {
@@ -52,32 +71,29 @@ export class WebRTCManager {
         username: this.config.turnUsername || import.meta.env.VITE_TURN_USERNAME,
         credential: this.config.turnCredential || import.meta.env.VITE_TURN_CREDENTIAL,
       });
-    } else {
-      // Community TURN relay to guarantee immediate connectivity across cellular networks / symmetric NATs
-      iceServers.push({
-        urls: [
-          'turn:openrelay.metered.ca:80',
-          'turn:openrelay.metered.ca:443',
-          'turns:openrelay.metered.ca:443',
-        ],
-        username: 'openrelayproject',
-        credential: 'openrelayproject',
-      });
     }
 
     this.pc = new RTCPeerConnection({
       iceServers,
-      iceCandidatePoolSize: 2,
     });
     this.hasRemoteDescription = false;
     this.pendingIceCandidates = [];
     this.localIceCandidates = [];
+    this.seenLocalCandidates.clear();
+    this.seenRemoteCandidates.clear();
 
     this.pc.onicecandidate = (event) => {
       if (event.candidate) {
-        const cand = event.candidate.toJSON();
-        this.localIceCandidates.push(cand);
-        this.onIceCandidate(cand);
+        const rawCand = event.candidate.toJSON();
+        const cand = this.sanitizeCandidate(rawCand);
+        if (cand && (cand.candidate || cand.candidate === '')) {
+          const key = `${cand.candidate}|${cand.sdpMid}|${cand.sdpMLineIndex}`;
+          if (!this.seenLocalCandidates.has(key)) {
+            this.seenLocalCandidates.add(key);
+            this.localIceCandidates.push(cand);
+            this.onIceCandidate(cand);
+          }
+        }
       }
     };
 
@@ -126,6 +142,10 @@ export class WebRTCManager {
     if (!this.pc) return null;
     try {
       console.info('[WebRTC] Initiating ICE restart offer...');
+      this.localIceCandidates = [];
+      this.seenLocalCandidates.clear();
+      this.seenRemoteCandidates.clear();
+      this.pendingIceCandidates = [];
       const offer = await this.pc.createOffer({ iceRestart: true });
       await this.pc.setLocalDescription(offer);
       return offer;
@@ -177,13 +197,22 @@ export class WebRTCManager {
   }
 
   public async addIceCandidate(candidate: RTCIceCandidateInit): Promise<void> {
-    if (!this.pc || !this.hasRemoteDescription) {
-      this.pendingIceCandidates.push(candidate);
+    const sanitized = this.sanitizeCandidate(candidate);
+    if (!sanitized || (!sanitized.candidate && sanitized.candidate !== '')) return;
+
+    const key = `${sanitized.candidate}|${sanitized.sdpMid}|${sanitized.sdpMLineIndex}`;
+    if (this.seenRemoteCandidates.has(key)) {
       return;
     }
+
+    if (!this.pc || !this.hasRemoteDescription) {
+      this.pendingIceCandidates.push(sanitized);
+      return;
+    }
+
     try {
-      if (!candidate || (!candidate.candidate && candidate.candidate !== '')) return;
-      await this.pc.addIceCandidate(candidate);
+      this.seenRemoteCandidates.add(key);
+      await this.pc.addIceCandidate(sanitized);
     } catch (err) {
       console.warn('[WebRTC] Failed to add ICE candidate:', err);
     }
@@ -193,9 +222,14 @@ export class WebRTCManager {
     if (!this.pc) return;
     const candidates = [...this.pendingIceCandidates];
     this.pendingIceCandidates = [];
-    for (const candidate of candidates) {
+    for (const rawCandidate of candidates) {
+      const candidate = this.sanitizeCandidate(rawCandidate);
+      if (!candidate || (!candidate.candidate && candidate.candidate !== '')) continue;
+      const key = `${candidate.candidate}|${candidate.sdpMid}|${candidate.sdpMLineIndex}`;
+      if (this.seenRemoteCandidates.has(key)) continue;
+
       try {
-        if (!candidate || (!candidate.candidate && candidate.candidate !== '')) continue;
+        this.seenRemoteCandidates.add(key);
         await this.pc.addIceCandidate(candidate);
       } catch (err) {
         console.warn('[WebRTC] Error processing pending candidate:', err);
@@ -210,8 +244,9 @@ export class WebRTCManager {
   public resendLocalCandidates(sendFn: (candidate: RTCIceCandidateInit) => void): void {
     for (const cand of this.localIceCandidates) {
       try {
-        if (cand && (cand.candidate || cand.candidate === '')) {
-          sendFn(cand);
+        const sanitized = this.sanitizeCandidate(cand);
+        if (sanitized && (sanitized.candidate || sanitized.candidate === '')) {
+          sendFn(sanitized);
         }
       } catch (err) {
         console.warn('[WebRTC] Error resending local candidate:', err);
@@ -245,6 +280,8 @@ export class WebRTCManager {
 
     this.pendingIceCandidates = [];
     this.localIceCandidates = [];
+    this.seenLocalCandidates.clear();
+    this.seenRemoteCandidates.clear();
     this.hasRemoteDescription = false;
   }
 }
