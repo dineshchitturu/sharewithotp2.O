@@ -154,8 +154,8 @@ export class FileSender {
     });
     this.dataChannel.send(headerMsg);
 
-    // Yield to ensure the receiver processes the transfer_header and prepares buffer
-    await this.yieldEventLoop();
+    // Yield 40ms to ensure the receiver processes the transfer_header and initializes buffers before chunks arrive
+    await new Promise((r) => setTimeout(r, 40));
 
     // Stream file data in safe, high-speed 63 KB SCTP transport slices with strict backpressure
     for (let offset = 0; offset < this.totalBytes; offset += SCTP_SLICE_SIZE) {
