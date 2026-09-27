@@ -35,6 +35,7 @@ export const Receive: React.FC<ReceiveProps> = ({ onBack }) => {
   const isJoiningRef = useRef<boolean>(false);
   const disconnectTimeoutRef = useRef<number | null>(null);
   const hasAnsweredRef = useRef<boolean>(false);
+  const readyIntervalRef = useRef<number | null>(null);
 
   useEffect(() => {
     // Read ?otp= or ?code= from URL parameters if present
@@ -53,6 +54,10 @@ export const Receive: React.FC<ReceiveProps> = ({ onBack }) => {
     if (disconnectTimeoutRef.current !== null) {
       window.clearTimeout(disconnectTimeoutRef.current);
       disconnectTimeoutRef.current = null;
+    }
+    if (readyIntervalRef.current !== null) {
+      window.clearInterval(readyIntervalRef.current);
+      readyIntervalRef.current = null;
     }
     isJoiningRef.current = false;
     hasAnsweredRef.current = false;
@@ -140,7 +145,7 @@ export const Receive: React.FC<ReceiveProps> = ({ onBack }) => {
                 setTransferState('DISCONNECTED');
                 setErrorMessage('Peer connection failed. Could not establish direct P2P connection.');
               }
-            }, 15000);
+            }, 8000);
           }
         },
         (dataChannel) => {
@@ -165,11 +170,30 @@ export const Receive: React.FC<ReceiveProps> = ({ onBack }) => {
             setErrorMessage('DataChannel encountered an error.');
           };
 
+          let pingCount = 0;
+          const stopReadyPing = () => {
+            if (readyIntervalRef.current !== null) {
+              window.clearInterval(readyIntervalRef.current);
+              readyIntervalRef.current = null;
+            }
+          };
+
+          const sendReady = () => {
+            if (dataChannel.readyState === 'open') {
+              try {
+                dataChannel.send(JSON.stringify({ type: 'receiver_ready' }));
+                console.info('[Receiver] Sent receiver_ready to sender.');
+              } catch {}
+            }
+          };
+
           // Initialize FileReceiver and attach listeners FIRST before notifying sender
           const receiver = new FileReceiver(dataChannel, {
             onMetadata: (meta) => {
+              stopReadyPing();
               setFileName(meta.name);
               setFileSize(meta.size);
+              setTransferState('TRANSFERRING');
             },
             onProgress: (prog) => {
               setProgress(prog);
@@ -178,6 +202,7 @@ export const Receive: React.FC<ReceiveProps> = ({ onBack }) => {
               }
             },
             onComplete: (url, hashVerified, hash) => {
+              stopReadyPing();
               isCompletedRef.current = true;
               setErrorMessage(null);
               if (url) setDownloadUrl(url);
@@ -192,6 +217,7 @@ export const Receive: React.FC<ReceiveProps> = ({ onBack }) => {
               // Gracefully maintain connection so file download completes without network aborts
             },
             onError: (err) => {
+              stopReadyPing();
               if (!isCompletedRef.current) {
                 setErrorMessage(err);
                 setTransferState('FAILED');
@@ -201,15 +227,6 @@ export const Receive: React.FC<ReceiveProps> = ({ onBack }) => {
 
           fileReceiverRef.current = receiver;
 
-          const sendReady = () => {
-            if (dataChannel.readyState === 'open') {
-              try {
-                dataChannel.send(JSON.stringify({ type: 'receiver_ready' }));
-                console.info('[Receiver] Sent receiver_ready to sender.');
-              } catch {}
-            }
-          };
-
           if (dataChannel.readyState === 'open') {
             sendReady();
           } else {
@@ -217,6 +234,15 @@ export const Receive: React.FC<ReceiveProps> = ({ onBack }) => {
               sendReady();
             };
           }
+
+          readyIntervalRef.current = window.setInterval(() => {
+            if (isCompletedRef.current || pingCount > 20) {
+              stopReadyPing();
+              return;
+            }
+            pingCount++;
+            sendReady();
+          }, 200);
         }
       );
       webrtcRef.current = webrtc;
@@ -239,6 +265,10 @@ export const Receive: React.FC<ReceiveProps> = ({ onBack }) => {
             const answer = await webrtc.handleOffer(msg.payload);
             hasAnsweredRef.current = true;
             signaling.sendAnswer(answer);
+            const candidates = webrtc.getLocalCandidates();
+            for (const cand of candidates) {
+              signaling.sendCandidate(cand);
+            }
           } catch (err: any) {
             console.warn('[Receiver] Harmless offer handling note:', err.message);
           }

@@ -130,7 +130,7 @@ export const Send: React.FC<SendProps> = ({ onBack }) => {
                 setTransferState('DISCONNECTED');
                 setErrorMessage('Peer connection failed. Could not establish direct P2P connection.');
               }
-            }, 15000);
+            }, 8000);
           }
         }
       );
@@ -142,6 +142,18 @@ export const Send: React.FC<SendProps> = ({ onBack }) => {
       if (dataChannel) {
         let readyFallbackTimer: any = null;
 
+        const triggerStream = () => {
+          if (readyFallbackTimer) {
+            window.clearTimeout(readyFallbackTimer);
+            readyFallbackTimer = null;
+          }
+          const fileToStream = selectedFileRef.current;
+          if (fileToStream && !isStreamingRef.current) {
+            console.info('[Sender] Triggering immediate stream to receiver.');
+            startStreaming(fileToStream, dataChannel);
+          }
+        };
+
         // Attach DataChannel message listener IMMEDIATELY so no incoming messages are ever dropped
         const onChannelMessage = (event: MessageEvent) => {
           if (typeof event.data === 'string') {
@@ -149,14 +161,7 @@ export const Send: React.FC<SendProps> = ({ onBack }) => {
               const data = JSON.parse(event.data);
               if (data.type === 'receiver_ready') {
                 console.info('[Sender] Received receiver_ready from receiver.');
-                if (readyFallbackTimer) {
-                  window.clearTimeout(readyFallbackTimer);
-                  readyFallbackTimer = null;
-                }
-                const fileToStream = selectedFileRef.current;
-                if (fileToStream && !isStreamingRef.current) {
-                  startStreaming(fileToStream, dataChannel);
-                }
+                triggerStream();
               } else if (data.type === 'transfer_ack') {
                 console.info('[Sender] Received transfer_ack via DataChannel.');
                 isCompletedRef.current = true;
@@ -179,19 +184,18 @@ export const Send: React.FC<SendProps> = ({ onBack }) => {
           setErrorMessage(null);
           setTransferState('CONNECTED');
 
-          const fileToStream = selectedFileRef.current;
-          if (!fileToStream) return;
-
           // Notify receiver that sender DataChannel is ready
           try {
             dataChannel.send(JSON.stringify({ type: 'sender_ready' }));
           } catch {}
 
-          // Start streaming IMMEDIATELY! Zero delay!
-          if (!isStreamingRef.current) {
-            console.info('[Sender] DataChannel open. Initiating immediate stream.');
-            startStreaming(fileToStream, dataChannel);
-          }
+          // Fallback: start streaming after 1.5s if receiver_ready is delayed
+          readyFallbackTimer = window.setTimeout(() => {
+            if (!isStreamingRef.current && !isCompletedRef.current && dataChannel.readyState === 'open') {
+              console.info('[Sender] Ready fallback timer elapsed. Starting stream to receiver.');
+              triggerStream();
+            }
+          }, 1500);
         };
 
         dataChannel.onerror = (err) => {
@@ -211,12 +215,6 @@ export const Send: React.FC<SendProps> = ({ onBack }) => {
         console.info('[Sender Signaling Rx]:', msg.type);
 
         if (msg.type === 'peer-joined' || msg.type === 'request-offer') {
-          // Immediately activate transfer progress screen on sender as soon as receiver unlocks
-          if (selectedFileRef.current && !isStreamingRef.current) {
-            setStep('transferring');
-            setTransferState('CONNECTING');
-          }
-
           // If already streaming, completed, or data channel is open, ignore
           if (isCompletedRef.current || (webrtcRef.current?.isDataChannelOpen() && webrtcRef.current?.pc?.signalingState === 'stable')) {
             console.info('[Sender] Connection is already active. Ignoring redundant offer trigger.');
@@ -229,12 +227,11 @@ export const Send: React.FC<SendProps> = ({ onBack }) => {
             return;
           }
 
-          // If offer was already sent and is waiting for answer, resend local description immediately
+          // If already waiting for answer on pending offer, reuse existing offer
           if (webrtcRef.current?.pc?.signalingState === 'have-local-offer') {
-            console.info('[Sender] Resending local offer to peer upon trigger.');
+            console.info('[Sender] Already have pending local offer. Resending existing offer.');
             if (webrtcRef.current.pc.localDescription) {
               signaling.sendOffer(webrtcRef.current.pc.localDescription);
-              offerSentAtRef.current = Date.now();
             }
             return;
           }
@@ -244,7 +241,6 @@ export const Send: React.FC<SendProps> = ({ onBack }) => {
             setTransferState('SIGNALING');
             try {
               const offer = await webrtc.createOffer();
-              offerSentAtRef.current = Date.now();
               signaling.sendOffer(offer);
               setTransferState('CONNECTING');
             } catch (err: any) {

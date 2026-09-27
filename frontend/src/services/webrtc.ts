@@ -9,6 +9,7 @@ export class WebRTCManager {
   public pc: RTCPeerConnection | null = null;
   public dataChannel: RTCDataChannel | null = null;
   private pendingIceCandidates: RTCIceCandidateInit[] = [];
+  private localIceCandidates: RTCIceCandidateInit[] = [];
   private hasRemoteDescription: boolean = false;
   private config: WebRTCConfig;
   private onIceCandidate: (candidate: RTCIceCandidateInit) => void;
@@ -37,8 +38,6 @@ export class WebRTCManager {
           stunServer,
           'stun:stun1.l.google.com:19302',
           'stun:stun2.l.google.com:19302',
-          'stun:stun3.l.google.com:19302',
-          'stun:stun4.l.google.com:19302',
           'stun:stun.cloudflare.com:3478',
         ],
       },
@@ -51,37 +50,41 @@ export class WebRTCManager {
         username: this.config.turnUsername || import.meta.env.VITE_TURN_USERNAME,
         credential: this.config.turnCredential || import.meta.env.VITE_TURN_CREDENTIAL,
       });
+    } else {
+      // Community TURN relay to guarantee immediate connectivity across cellular networks / symmetric NATs
+      iceServers.push({
+        urls: [
+          'turn:openrelay.metered.ca:80',
+          'turn:openrelay.metered.ca:443',
+          'turns:openrelay.metered.ca:443',
+        ],
+        username: 'openrelayproject',
+        credential: 'openrelayproject',
+      });
     }
 
-    this.pc = new RTCPeerConnection({ iceServers });
+    this.pc = new RTCPeerConnection({
+      iceServers,
+      iceCandidatePoolSize: 2,
+    });
     this.hasRemoteDescription = false;
     this.pendingIceCandidates = [];
+    this.localIceCandidates = [];
 
     this.pc.onicecandidate = (event) => {
       if (event.candidate) {
-        this.onIceCandidate(event.candidate.toJSON());
+        const cand = event.candidate.toJSON();
+        this.localIceCandidates.push(cand);
+        this.onIceCandidate(cand);
       }
     };
 
-    const handleStateChange = () => {
-      if (!this.pc) return;
-      const connState = this.pc.connectionState;
-      const iceState = this.pc.iceConnectionState;
-      console.info(`[WebRTC State]: connectionState=${connState}, iceConnectionState=${iceState}`);
-
-      if (connState === 'connected' || iceState === 'connected' || iceState === 'completed') {
-        this.onConnectionStateChange('connected');
-      } else if (connState === 'failed') {
-        this.onConnectionStateChange('failed');
-      } else if (connState === 'disconnected') {
-        this.onConnectionStateChange('disconnected');
-      } else if (connState === 'connecting' || iceState === 'checking') {
-        this.onConnectionStateChange('connecting');
+    this.pc.onconnectionstatechange = () => {
+      if (this.pc) {
+        console.info('[WebRTC] Connection state changed:', this.pc.connectionState);
+        this.onConnectionStateChange(this.pc.connectionState);
       }
     };
-
-    this.pc.onconnectionstatechange = handleStateChange;
-    this.pc.oniceconnectionstatechange = handleStateChange;
 
     if (isInitiator) {
       // Sender creates the DataChannel
@@ -198,6 +201,10 @@ export class WebRTCManager {
     }
   }
 
+  public getLocalCandidates(): RTCIceCandidateInit[] {
+    return [...this.localIceCandidates];
+  }
+
   public close(): void {
     if (this.dataChannel) {
       try {
@@ -223,6 +230,7 @@ export class WebRTCManager {
     }
 
     this.pendingIceCandidates = [];
+    this.localIceCandidates = [];
     this.hasRemoteDescription = false;
   }
 }
