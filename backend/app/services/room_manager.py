@@ -30,6 +30,8 @@ class RoomManager:
         self._rooms: Dict[str, RoomSession] = {}
         # Map of room_id -> { "sender": WebSocket, "receiver": WebSocket }
         self._connections: Dict[str, Dict[str, WebSocket]] = {}
+        # Map of room_id -> { "sender": List[dict], "receiver": List[dict] }
+        self._buffered_messages: Dict[str, Dict[str, list]] = {}
         self._lock = asyncio.Lock()
 
     async def create_room(self, room_id: Optional[str] = None) -> Tuple[RoomSession, str]:
@@ -99,6 +101,7 @@ class RoomManager:
 
             self._rooms[clean_room_id] = session
             self._connections[clean_room_id] = {}
+            self._buffered_messages[clean_room_id] = {"sender": [], "receiver": []}
             logger.info(f"Created temporary room '{clean_room_id}' (expires at {expires_at.isoformat()})")
             return session, plaintext_otp
 
@@ -186,11 +189,50 @@ class RoomManager:
             self._connections[clean_room_id][role] = websocket
             return True
 
-    async def remove_connection(self, room_id: str, role: str) -> None:
+    async def remove_connection(self, room_id: str, role: str, websocket: Optional[WebSocket] = None) -> bool:
         clean_room_id = room_id.strip().lower()
         async with self._lock:
             if clean_room_id in self._connections and role in self._connections[clean_room_id]:
+                if websocket is not None and self._connections[clean_room_id][role] != websocket:
+                    logger.info(f"Retaining newer WebSocket connection for '{clean_room_id}', role '{role}'")
+                    return False
                 del self._connections[clean_room_id][role]
+                return True
+            return False
+
+    async def buffer_signaling_message(self, room_id: str, target_role: str, message: dict) -> None:
+        """Buffer a WebRTC signaling message for a peer that is not yet connected."""
+        clean_room_id = room_id.strip().lower()
+        async with self._lock:
+            if clean_room_id not in self._buffered_messages:
+                self._buffered_messages[clean_room_id] = {"sender": [], "receiver": []}
+
+            buf = self._buffered_messages[clean_room_id].setdefault(target_role, [])
+            msg_type = message.get("type")
+
+            # For offers and answers, keep the most recent one to prevent duplicate stale SDP
+            if msg_type in ("offer", "answer"):
+                self._buffered_messages[clean_room_id][target_role] = [
+                    m for m in buf if m.get("type") != msg_type
+                ]
+                self._buffered_messages[clean_room_id][target_role].append(message)
+            elif msg_type == "request-offer":
+                # Only keep one request-offer in queue
+                if not any(m.get("type") == "request-offer" for m in buf):
+                    buf.append(message)
+            else:
+                # ICE candidates and others: append to guarantee complete candidate exchange
+                buf.append(message)
+
+    async def get_and_clear_buffered_messages(self, room_id: str, role: str) -> list:
+        """Retrieve and clear all queued signaling messages for this peer."""
+        clean_room_id = room_id.strip().lower()
+        async with self._lock:
+            if clean_room_id in self._buffered_messages:
+                msgs = self._buffered_messages[clean_room_id].get(role, [])
+                self._buffered_messages[clean_room_id][role] = []
+                return msgs
+            return []
 
     async def get_peer_connection(self, room_id: str, current_role: str) -> Optional[WebSocket]:
         clean_room_id = room_id.strip().lower()
@@ -212,6 +254,9 @@ class RoomManager:
             session.otp_hash = ""
             session.salt = ""
 
+        # Purge buffered signaling messages
+        self._buffered_messages.pop(clean_room_id, None)
+
         # Close all active WebSocket signaling channels for this room
         room_conns = self._connections.pop(clean_room_id, {})
         for role, ws in room_conns.items():
@@ -221,6 +266,12 @@ class RoomManager:
                 pass
 
         logger.info(f"Room '{clean_room_id}' completely destroyed and purged from memory ({reason}).")
+
+    def reset(self) -> None:
+        """Reset all internal state (for testing)."""
+        self._rooms.clear()
+        self._connections.clear()
+        self._buffered_messages.clear()
 
     async def cleanup_expired_rooms(self) -> int:
         """Scan and evict expired rooms."""

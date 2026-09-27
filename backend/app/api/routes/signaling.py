@@ -85,6 +85,26 @@ async def websocket_signaling_endpoint(
         except Exception as e:
             logger.warning(f"Failed to notify peer about join in room '{clean_room_id}': {e}")
 
+    # Immediately deliver any queued signaling messages for this connecting peer
+    buffered_for_self = await room_manager.get_and_clear_buffered_messages(clean_room_id, role)
+    for b_msg in buffered_for_self:
+        try:
+            await websocket.send_text(json.dumps(b_msg))
+            logger.info(f"Delivered buffered message '{b_msg.get('type')}' to '{role}' in room '{clean_room_id}'")
+        except Exception as e:
+            logger.warning(f"Failed to deliver buffered message to '{role}': {e}")
+
+    # Also, if peer is already connected, deliver any queued messages for the peer
+    if peer_ws:
+        peer_role = "receiver" if role == "sender" else "sender"
+        buffered_for_peer = await room_manager.get_and_clear_buffered_messages(clean_room_id, peer_role)
+        for b_msg in buffered_for_peer:
+            try:
+                await peer_ws.send_text(json.dumps(b_msg))
+                logger.info(f"Delivered buffered message '{b_msg.get('type')}' to '{peer_role}' in room '{clean_room_id}'")
+            except Exception as e:
+                logger.warning(f"Failed to deliver buffered message to '{peer_role}': {e}")
+
     try:
         while True:
             # Receive text frame (never accept binary frames here to guarantee zero file transfer via WS)
@@ -153,13 +173,20 @@ async def websocket_signaling_endpoint(
 
             # WebRTC signaling relay: offer, answer, ice-candidate, request-offer
             if msg_type in ("offer", "answer", "ice-candidate", "request-offer"):
+                peer_role = "receiver" if role == "sender" else "sender"
                 peer_ws = await room_manager.get_peer_connection(clean_room_id, role)
+                data["sender_role"] = role
+
                 if peer_ws:
-                    # Append sender metadata and relay to peer
-                    data["sender_role"] = role
-                    await peer_ws.send_text(json.dumps(data))
+                    try:
+                        await peer_ws.send_text(json.dumps(data))
+                    except Exception as e:
+                        logger.warning(f"Failed to relay '{msg_type}' directly to '{peer_role}' in room '{clean_room_id}': {e}")
+                        # Buffer message for peer upon reconnect
+                        await room_manager.buffer_signaling_message(clean_room_id, peer_role, data)
                 else:
-                    logger.debug(f"Peer not connected for room '{clean_room_id}' to relay '{msg_type}'")
+                    logger.info(f"Peer '{peer_role}' not yet connected in room '{clean_room_id}'. Buffering '{msg_type}'.")
+                    await room_manager.buffer_signaling_message(clean_room_id, peer_role, data)
             else:
                 logger.debug(f"Unknown signaling message type '{msg_type}' in room '{clean_room_id}'")
 
@@ -168,13 +195,15 @@ async def websocket_signaling_endpoint(
     except Exception as e:
         logger.error(f"Error in signaling WebSocket loop for room '{clean_room_id}': {e}")
     finally:
-        await room_manager.remove_connection(clean_room_id, role)
-        # Inform peer if still connected
-        peer_ws = await room_manager.get_peer_connection(clean_room_id, role)
-        if peer_ws:
-            try:
-                await peer_ws.send_text(
-                    json.dumps({"type": "peer-left", "role": role})
-                )
-            except Exception:
-                pass
+        removed = await room_manager.remove_connection(clean_room_id, role, websocket)
+        if removed:
+            logger.info(f"WebSocket connection removed: role='{role}', room='{clean_room_id}'")
+            # Inform peer only if the active connection was truly removed and no newer connection exists
+            peer_ws = await room_manager.get_peer_connection(clean_room_id, role)
+            if peer_ws:
+                try:
+                    await peer_ws.send_text(
+                        json.dumps({"type": "peer-left", "role": role})
+                    )
+                except Exception:
+                    pass

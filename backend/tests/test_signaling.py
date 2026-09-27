@@ -7,8 +7,7 @@ from app.models.session import SessionState
 
 @pytest.fixture(autouse=True)
 def reset_room_manager():
-    room_manager._rooms.clear()
-    room_manager._connections.clear()
+    room_manager.reset()
     yield
 
 
@@ -93,4 +92,67 @@ def test_signaling_relay_flow():
     recreate_resp = client.post("/api/rooms", json={"room_id": "webrtctest"})
     assert recreate_resp.status_code == 201
     assert recreate_resp.json()["room_id"] == "webrtctest"
+
+
+def test_signaling_buffers_offer_and_candidates_before_receiver_joins():
+    """Verify that if sender produces offer and ICE candidates before receiver connects,
+    the backend buffers them and flushes them immediately when receiver connects."""
+    client = TestClient(app)
+
+    create_resp = client.post("/api/rooms", json={"room_id": "buffertest"})
+    assert create_resp.status_code == 201
+    room_data = create_resp.json()
+    sender_token = room_data["sender_token"]
+    otp = room_data["otp"]
+
+    verify_resp = client.post("/api/rooms/buffertest/verify", json={"otp": otp})
+    assert verify_resp.status_code == 200
+    receiver_token = verify_resp.json()["session_token"]
+
+    # 1. Connect sender
+    with client.websocket_connect(
+        f"/ws/signaling/buffertest?role=sender&token={sender_token}"
+    ) as sender_ws:
+        sender_init = sender_ws.receive_json()
+        assert sender_init["type"] == "connection-success"
+
+        # Sender produces offer and candidates while receiver is NOT connected yet
+        offer_data = {"sdp": "early_offer_sdp", "type": "offer"}
+        sender_ws.send_json({"type": "offer", "payload": offer_data})
+
+        cand1 = {"candidate": "candidate:1 1 UDP ...", "sdpMid": "0"}
+        cand2 = {"candidate": "candidate:2 1 UDP ...", "sdpMid": "0"}
+        sender_ws.send_json({"type": "ice-candidate", "payload": cand1})
+        sender_ws.send_json({"type": "ice-candidate", "payload": cand2})
+
+        # 2. Receiver connects now!
+        with client.websocket_connect(
+            f"/ws/signaling/buffertest?role=receiver&token={receiver_token}"
+        ) as receiver_ws:
+            # Receiver gets connection-success
+            r_init = receiver_ws.receive_json()
+            assert r_init["type"] == "connection-success"
+
+            # Sender receives peer-joined
+            s_joined = sender_ws.receive_json()
+            assert s_joined["type"] == "peer-joined"
+
+            # Receiver receives peer-joined
+            r_joined = receiver_ws.receive_json()
+            assert r_joined["type"] == "peer-joined"
+
+            # Receiver receives the buffered offer!
+            r_offer = receiver_ws.receive_json()
+            assert r_offer["type"] == "offer"
+            assert r_offer["payload"]["sdp"] == "early_offer_sdp"
+
+            # Receiver receives buffered candidate 1!
+            r_cand1 = receiver_ws.receive_json()
+            assert r_cand1["type"] == "ice-candidate"
+            assert r_cand1["payload"]["candidate"] == cand1["candidate"]
+
+            # Receiver receives buffered candidate 2!
+            r_cand2 = receiver_ws.receive_json()
+            assert r_cand2["type"] == "ice-candidate"
+            assert r_cand2["payload"]["candidate"] == cand2["candidate"]
 
