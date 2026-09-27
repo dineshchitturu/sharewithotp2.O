@@ -179,6 +179,10 @@ class RoomManager:
             session = self._rooms.get(clean_room_id)
             if session and not session.is_destroyed:
                 session.state = new_state
+                # When transferring, extend expiration to ensure large files (1GB+) complete safely
+                if new_state in (SessionState.TRANSFERRING, SessionState.CONNECTED):
+                    settings = get_settings()
+                    session.expires_at = datetime.now(timezone.utc) + timedelta(seconds=settings.ROOM_EXPIRY_SECONDS)
                 logger.info(f"Room '{clean_room_id}' transition to state {new_state.value}")
 
     async def register_connection(self, room_id: str, role: str, websocket: WebSocket) -> bool:
@@ -281,6 +285,9 @@ class RoomManager:
         async with self._lock:
             for room_id, session in self._rooms.items():
                 if not session.is_destroyed and session.expires_at <= now:
+                    # Never evict a room where active transfer is in progress
+                    if session.state in (SessionState.TRANSFERRING, SessionState.CONNECTED):
+                        continue
                     expired_ids.append(room_id)
 
         count = len(expired_ids)
