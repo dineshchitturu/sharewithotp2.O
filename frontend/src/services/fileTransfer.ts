@@ -1,10 +1,10 @@
 import type { FileMetadata, TransferProgress } from '../types/transfer';
 
-// Chunk size configuration (1 MB standard chunking with safe SCTP transport slicing)
-export const DEFAULT_CHUNK_SIZE = 1024 * 1024; // 1 MB
-export const HIGH_WATER_MARK = 2 * 1024 * 1024; // 2 MB backpressure threshold (high headroom for real-world networks)
-export const LOW_WATER_MARK = 512 * 1024; // 512 KB resume threshold
+// Chunk size configuration (1 MB logical chunks for UI metrics, 63 KB wire transport slices)
+export const DEFAULT_CHUNK_SIZE = 1024 * 1024; // 1 MB logical chunking
 export const SCTP_SLICE_SIZE = 64 * 1024 - 1024; // 63 KB (64,512 bytes) safe cross-browser transport slice
+export const HIGH_WATER_MARK = 1024 * 1024; // 1 MB backpressure threshold (keeps SCTP buffer safe & prevents buffer bloat)
+export const LOW_WATER_MARK = 256 * 1024; // 256 KB resume threshold (keeps network pipe continuously saturated)
 
 export interface TransferCallbacks {
   onMetadata?: (metadata: FileMetadata) => void;
@@ -20,9 +20,11 @@ export class FileSender {
   private chunkSize: number;
   private totalBytes: number = 0;
   private totalChunks: number = 0;
+  private bytesSent: number = 0;
   private currentMetadata: FileMetadata | null = null;
   private lastProgressTime: number = 0;
   private lastReportedNetBytes: number = 0;
+  private smoothedSpeed: number = 0;
 
   constructor(
     dataChannel: RTCDataChannel,
@@ -56,7 +58,26 @@ export class FileSender {
     this.isCancelled = true;
   }
 
-  private emitProgress(bytesTransferred: number, chunkIndex: number, force: boolean = false): void {
+  /**
+   * Yield to macrotask queue using MessageChannel to avoid HTML5 4ms timer clamping
+   * and Chrome background tab 1000ms timer throttling.
+   */
+  private yieldEventLoop(): Promise<void> {
+    if (typeof MessageChannel !== 'undefined') {
+      return new Promise<void>((resolve) => {
+        const channel = new MessageChannel();
+        channel.port1.onmessage = () => {
+          channel.port1.close();
+          channel.port2.close();
+          resolve();
+        };
+        channel.port2.postMessage(null);
+      });
+    }
+    return new Promise<void>((resolve) => setTimeout(resolve, 0));
+  }
+
+  private emitProgress(force: boolean = false): void {
     const now = performance.now();
     const timeDeltaSec = (now - this.lastProgressTime) / 1000;
 
@@ -65,21 +86,33 @@ export class FileSender {
     }
 
     const buffered = this.dataChannel?.bufferedAmount || 0;
-    const netBytes = Math.max(0, bytesTransferred - buffered);
+    const netBytes = Math.min(this.totalBytes, Math.max(0, this.bytesSent - buffered));
     const deltaBytes = Math.max(0, netBytes - this.lastReportedNetBytes);
-    const currentSpeed = deltaBytes / (timeDeltaSec || 0.001);
+    const instantSpeed = deltaBytes / (timeDeltaSec || 0.001);
+
+    if (this.smoothedSpeed === 0) {
+      this.smoothedSpeed = instantSpeed;
+    } else if (instantSpeed > 0) {
+      this.smoothedSpeed = this.smoothedSpeed * 0.7 + instantSpeed * 0.3;
+    }
+
     const remainingBytes = Math.max(0, this.totalBytes - netBytes);
-    const remainingSeconds = currentSpeed > 0 ? remainingBytes / currentSpeed : 0;
-    const percentage = Math.min(99, Math.round((netBytes / this.totalBytes) * 100));
+    const remainingSeconds = this.smoothedSpeed > 0 ? remainingBytes / this.smoothedSpeed : 0;
+    const percentage = Math.min(99, Math.round((netBytes / (this.totalBytes || 1)) * 100));
+
+    const currentMbChunk = Math.min(
+      this.totalChunks,
+      Math.max(1, Math.ceil(netBytes / (1024 * 1024)))
+    );
 
     try {
       this.callbacks.onProgress({
         bytesTransferred: netBytes,
         totalBytes: this.totalBytes,
         percentage,
-        speedBytesPerSec: currentSpeed,
+        speedBytesPerSec: this.smoothedSpeed,
         remainingSeconds,
-        currentChunk: Math.min(chunkIndex + 1, this.totalChunks),
+        currentChunk: currentMbChunk,
         totalChunks: this.totalChunks,
       });
     } catch (err) {
@@ -93,9 +126,16 @@ export class FileSender {
   public async sendFile(file: File): Promise<void> {
     this.isCancelled = false;
     this.totalBytes = file.size;
-    this.totalChunks = Math.ceil(this.totalBytes / this.chunkSize);
+    this.totalChunks = Math.ceil(this.totalBytes / (1024 * 1024)) || 1;
+    this.bytesSent = 0;
     this.lastProgressTime = performance.now();
     this.lastReportedNetBytes = 0;
+    this.smoothedSpeed = 0;
+
+    // Ensure bufferedAmountLowThreshold is calibrated
+    try {
+      this.dataChannel.bufferedAmountLowThreshold = LOW_WATER_MARK;
+    } catch {}
 
     // 1. Send File Metadata Header
     const metadata: FileMetadata = {
@@ -114,12 +154,11 @@ export class FileSender {
     });
     this.dataChannel.send(headerMsg);
 
-    // Yield 35ms to ensure the receiver processes the transfer_header and initializes buffers before chunks arrive
-    await new Promise((r) => setTimeout(r, 35));
+    // Yield to ensure the receiver processes the transfer_header and prepares buffer
+    await this.yieldEventLoop();
 
-    let bytesTransferred = 0;
-
-    for (let chunkIndex = 0; chunkIndex < this.totalChunks; chunkIndex++) {
+    // Stream file data in safe, high-speed 63 KB SCTP transport slices with strict backpressure
+    for (let offset = 0; offset < this.totalBytes; offset += SCTP_SLICE_SIZE) {
       if (this.isCancelled) {
         this.callbacks.onError('Transfer cancelled by sender.');
         return;
@@ -130,39 +169,30 @@ export class FileSender {
         return;
       }
 
-      const start = chunkIndex * this.chunkSize;
-      const end = Math.min(start + this.chunkSize, this.totalBytes);
-      const slice = file.slice(start, end);
-
-      const arrayBuffer = await slice.arrayBuffer();
-
-      // Transmit the 1 MB chunk across the data channel via safe SCTP transport slices
-      for (let offset = 0; offset < arrayBuffer.byteLength; offset += SCTP_SLICE_SIZE) {
-        if (this.dataChannel.bufferedAmount > HIGH_WATER_MARK) {
-          await this.waitForBufferDrain();
-        }
+      // STRICT BACKPRESSURE: Wait until the buffer has drained below LOW_WATER_MARK
+      // whenever it exceeds HIGH_WATER_MARK. This prevents buffer bloat and SCTP stalls.
+      while (this.dataChannel.bufferedAmount > HIGH_WATER_MARK) {
+        await this.waitForBufferDrain();
 
         if (this.isCancelled || this.dataChannel.readyState !== 'open') {
           this.callbacks.onError('Transfer interrupted.');
           return;
         }
-
-        const fragment = arrayBuffer.slice(offset, Math.min(offset + SCTP_SLICE_SIZE, arrayBuffer.byteLength));
-        this.dataChannel.send(fragment);
-
-        bytesTransferred += fragment.byteLength;
-
-        // Yield event loop every 4 slices (256 KB) so SCTP ACKs and UI rendering process smoothly
-        if ((offset / SCTP_SLICE_SIZE) % 4 === 0) {
-          await new Promise((r) => setTimeout(r, 0));
-        }
-
-        this.emitProgress(bytesTransferred, chunkIndex);
       }
 
-      // Yield event loop after each 1 MB chunk so WebRTC keepalives and UI rendering never stall
-      await new Promise((r) => setTimeout(r, 0));
-      this.emitProgress(bytesTransferred, chunkIndex);
+      const chunkEnd = Math.min(offset + SCTP_SLICE_SIZE, this.totalBytes);
+      const slice = file.slice(offset, chunkEnd);
+      const arrayBuffer = await slice.arrayBuffer();
+
+      this.dataChannel.send(arrayBuffer);
+      this.bytesSent += arrayBuffer.byteLength;
+
+      // Yield event loop every 8 slices (~512 KB) so browser handles I/O and keepalives without timer throttling
+      if ((offset / SCTP_SLICE_SIZE) % 8 === 0) {
+        await this.yieldEventLoop();
+      }
+
+      this.emitProgress();
     }
 
     // Wait until all chunk bytes have completely drained from SCTP buffer
@@ -252,12 +282,9 @@ export class FileSender {
     ) {
       return Promise.resolve();
     }
-    return new Promise((resolve) => {
-      let isDone = false;
 
-      try {
-        this.dataChannel.bufferedAmountLowThreshold = LOW_WATER_MARK;
-      } catch {}
+    return new Promise<void>((resolve) => {
+      let isDone = false;
 
       const cleanup = () => {
         if (!isDone) {
@@ -265,22 +292,25 @@ export class FileSender {
           try {
             if (this.dataChannel) {
               this.dataChannel.removeEventListener('bufferedamountlow', onBufferedAmountLow);
-              this.dataChannel.onbufferedamountlow = null;
             }
           } catch {}
-          clearInterval(pollTimer);
-          clearTimeout(safetyTimer);
+          if (pollTimer) clearInterval(pollTimer);
           resolve();
         }
       };
 
       const onBufferedAmountLow = () => cleanup();
+
       try {
-        this.dataChannel.onbufferedamountlow = onBufferedAmountLow;
+        this.dataChannel.bufferedAmountLowThreshold = LOW_WATER_MARK;
         this.dataChannel.addEventListener('bufferedamountlow', onBufferedAmountLow);
       } catch {}
 
+      // Fast poll backup timer to detect drain if event was missed or delayed by browser
       const pollTimer = setInterval(() => {
+        // Continuously update progress as bytes drain out over the wire
+        this.emitProgress();
+
         if (
           !this.dataChannel ||
           this.dataChannel.readyState !== 'open' ||
@@ -289,12 +319,7 @@ export class FileSender {
         ) {
           cleanup();
         }
-      }, 15);
-
-      // 1000ms safety timeout ensures large transfers never get permanently stuck
-      const safetyTimer = setTimeout(() => {
-        cleanup();
-      }, 1000);
+      }, 20);
     });
   }
 
@@ -313,23 +338,21 @@ export class FileSender {
           console.warn('[FileSender] Timed out waiting for buffer to drain to 0, remaining:', this.dataChannel.bufferedAmount);
           break;
         }
+        this.emitProgress();
         await new Promise<void>((resolve) => {
           const onLow = () => {
             if (this.dataChannel) {
               this.dataChannel.removeEventListener('bufferedamountlow', onLow);
-              this.dataChannel.onbufferedamountlow = null;
             }
             resolve();
           };
-          this.dataChannel.onbufferedamountlow = onLow;
           this.dataChannel.addEventListener('bufferedamountlow', onLow);
           setTimeout(() => {
             if (this.dataChannel) {
               this.dataChannel.removeEventListener('bufferedamountlow', onLow);
-              this.dataChannel.onbufferedamountlow = null;
             }
             resolve();
-          }, 100);
+          }, 50);
         });
       }
 
@@ -346,12 +369,13 @@ export class FileReceiver {
   private blobParts: Blob[] = [];
   private currentBatch: ArrayBuffer[] = [];
   private currentBatchBytes: number = 0;
-  private readonly BATCH_THRESHOLD: number = 4 * 1024 * 1024; // 4 MB per Blob slice to keep V8 heap flat and reduce Blob object allocations
+  private readonly BATCH_THRESHOLD: number = 4 * 1024 * 1024; // 4 MB per Blob slice to keep V8 heap flat and reduce memory allocations
   private pendingChunks: ArrayBuffer[] = [];
   private bytesReceived: number = 0;
   private startTime: number = 0;
   private lastProgressTime: number = 0;
   private bytesSinceLastProgress: number = 0;
+  private smoothedSpeed: number = 0;
   private isCancelled: boolean = false;
   private isCompleted: boolean = false;
   private autoFinalizeTimeout: any = null;
@@ -421,6 +445,7 @@ export class FileReceiver {
     this.startTime = performance.now();
     this.lastProgressTime = this.startTime;
     this.bytesSinceLastProgress = 0;
+    this.smoothedSpeed = 0;
 
     this.callbacks.onMetadata?.(meta);
 
@@ -431,6 +456,7 @@ export class FileReceiver {
       }
     } catch {}
 
+    const totalMbChunks = Math.ceil(meta.size / (1024 * 1024)) || 1;
     this.callbacks.onProgress({
       bytesTransferred: 0,
       totalBytes: meta.size,
@@ -438,7 +464,7 @@ export class FileReceiver {
       speedBytesPerSec: 0,
       remainingSeconds: 0,
       currentChunk: 0,
-      totalChunks: meta.totalChunks,
+      totalChunks: totalMbChunks,
     });
 
     // Process any chunks that arrived before header
@@ -475,7 +501,7 @@ export class FileReceiver {
     this.bytesReceived += chunk.byteLength;
     this.bytesSinceLastProgress += chunk.byteLength;
 
-    // Flush batch to off-heap Blob slice when threshold reached to prevent V8 heap OOM
+    // Flush batch to off-heap Blob slice when threshold reached to keep V8 heap flat
     if (this.currentBatchBytes >= this.BATCH_THRESHOLD) {
       try {
         this.blobParts.push(new Blob(this.currentBatch));
@@ -490,20 +516,31 @@ export class FileReceiver {
     const timeDeltaSec = (now - this.lastProgressTime) / 1000;
 
     if (timeDeltaSec >= 0.15 || this.bytesReceived >= this.metadata.size) {
-      const speed = this.bytesSinceLastProgress / (timeDeltaSec || 0.001);
+      const instantSpeed = this.bytesSinceLastProgress / (timeDeltaSec || 0.001);
+      if (this.smoothedSpeed === 0) {
+        this.smoothedSpeed = instantSpeed;
+      } else if (instantSpeed > 0) {
+        this.smoothedSpeed = this.smoothedSpeed * 0.7 + instantSpeed * 0.3;
+      }
+
       const remainingBytes = Math.max(0, this.metadata.size - this.bytesReceived);
-      const remainingSeconds = speed > 0 ? remainingBytes / speed : 0;
+      const remainingSeconds = this.smoothedSpeed > 0 ? remainingBytes / this.smoothedSpeed : 0;
       const percentage = Math.min(100, Math.round((this.bytesReceived / this.metadata.size) * 100));
+      const totalMbChunks = Math.ceil(this.metadata.size / (1024 * 1024)) || 1;
+      const currentMbChunk = Math.min(
+        totalMbChunks,
+        Math.max(1, Math.ceil(this.bytesReceived / (1024 * 1024)))
+      );
 
       try {
         this.callbacks.onProgress({
           bytesTransferred: this.bytesReceived,
           totalBytes: this.metadata.size,
           percentage,
-          speedBytesPerSec: speed,
+          speedBytesPerSec: this.smoothedSpeed,
           remainingSeconds,
-          currentChunk: Math.ceil(this.bytesReceived / (this.metadata.chunkSize || DEFAULT_CHUNK_SIZE)),
-          totalChunks: this.metadata.totalChunks,
+          currentChunk: currentMbChunk,
+          totalChunks: totalMbChunks,
         });
       } catch (err) {
         console.warn('[FileReceiver] Error in onProgress callback:', err);
@@ -544,6 +581,8 @@ export class FileReceiver {
       this.currentBatchBytes = 0;
     }
 
+    const totalMbChunks = Math.ceil(this.metadata.size / (1024 * 1024)) || 1;
+
     // Emit 100% progress on receiver
     this.callbacks.onProgress({
       bytesTransferred: this.metadata.size,
@@ -551,8 +590,8 @@ export class FileReceiver {
       percentage: 100,
       speedBytesPerSec: 0,
       remainingSeconds: 0,
-      currentChunk: this.metadata.totalChunks,
-      totalChunks: this.metadata.totalChunks,
+      currentChunk: totalMbChunks,
+      totalChunks: totalMbChunks,
     });
 
     const blob = new Blob(this.blobParts, {
