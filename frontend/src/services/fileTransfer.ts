@@ -25,6 +25,10 @@ export class FileSender {
   private lastProgressTime: number = 0;
   private lastReportedNetBytes: number = 0;
   private smoothedSpeed: number = 0;
+  private hasReceivedAck: boolean = false;
+  private ackVerified: boolean = false;
+  private ackHash: string = '';
+  private ackResolver: (() => void) | null = null;
 
   constructor(
     dataChannel: RTCDataChannel,
@@ -48,6 +52,12 @@ export class FileSender {
               type: 'transfer_header',
               metadata: this.currentMetadata,
             }));
+          } else if (msg.type === 'transfer_ack') {
+            console.info('[FileSender] Received transfer_ack from receiver! Verified:', msg.verified);
+            this.hasReceivedAck = true;
+            this.ackVerified = !!msg.verified;
+            this.ackHash = msg.hash || '';
+            this.ackResolver?.();
           }
         } catch {}
       }
@@ -236,52 +246,27 @@ export class FileSender {
     await this.waitForAck(15000);
 
     // Complete transfer on sender
-    this.callbacks.onComplete(undefined, true, '');
+    this.callbacks.onComplete(undefined, this.ackVerified, this.ackHash);
   }
 
   private waitForAck(timeoutMs: number = 15000): Promise<void> {
-    if (!this.dataChannel || this.dataChannel.readyState !== 'open') {
+    if (this.hasReceivedAck || !this.dataChannel || this.dataChannel.readyState !== 'open') {
       return Promise.resolve();
     }
 
     return new Promise((resolve) => {
-      let isDone = false;
-
-      const cleanup = () => {
-        if (!isDone) {
-          isDone = true;
-          clearTimeout(timer);
-          try {
-            if (this.dataChannel) {
-              this.dataChannel.removeEventListener('message', onMessage);
-            }
-          } catch {}
-          resolve();
-        }
+      let timer: any = null;
+      this.ackResolver = () => {
+        if (timer) clearTimeout(timer);
+        this.ackResolver = null;
+        resolve();
       };
 
-      const onMessage = (event: MessageEvent) => {
-        if (typeof event.data === 'string') {
-          try {
-            const data = JSON.parse(event.data);
-            if (data.type === 'transfer_ack') {
-              console.info('[FileSender] Received transfer_ack from receiver! Verified:', data.verified);
-              cleanup();
-            }
-          } catch {}
-        }
-      };
-
-      const timer = setTimeout(() => {
+      timer = setTimeout(() => {
         console.warn('[FileSender] ACK wait timeout elapsed, finalizing sender transfer.');
-        cleanup();
+        this.ackResolver = null;
+        resolve();
       }, timeoutMs);
-
-      try {
-        this.dataChannel.addEventListener('message', onMessage);
-      } catch {
-        cleanup();
-      }
     });
   }
 
