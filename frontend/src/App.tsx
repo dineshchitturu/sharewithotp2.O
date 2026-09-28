@@ -140,7 +140,7 @@ export function App() {
             </div>
             <div>
               <span className="font-extrabold text-base tracking-tight text-white block leading-tight group-hover:text-cyan-200 transition-colors">
-                ShareWithOTP
+                ShareWithOtp2.O
               </span>
               <span className="text-[9px] uppercase font-bold tracking-widest text-cyan-400 block leading-none">
                 P2P File Transfer
