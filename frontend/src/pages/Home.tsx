@@ -241,7 +241,7 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
           </div>
 
           <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-white mb-3">
-            About ShareWithOTP
+            About ShareWithOTP2.O
           </h2>
           <p className="text-sm sm:text-base text-slate-300 max-w-xl mx-auto leading-relaxed">
             A zero-knowledge, browser-to-browser temporary file sharing engine built with modern WebRTC, FastAPI, and cryptographic OTP verification.
