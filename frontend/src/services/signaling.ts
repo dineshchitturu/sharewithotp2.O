@@ -152,14 +152,17 @@ export class SignalingClient {
   }
 
   public sendOffer(sdp: RTCSessionDescriptionInit) {
+    console.info('[WEBRTC] OFFER_SENT');
     this.sendMessage({ type: 'offer', payload: sdp });
   }
 
   public sendAnswer(sdp: RTCSessionDescriptionInit) {
+    console.info('[WEBRTC] ANSWER_SENT');
     this.sendMessage({ type: 'answer', payload: sdp });
   }
 
   public sendCandidate(candidate: RTCIceCandidateInit) {
+    console.info('[ICE] SENT');
     this.sendMessage({ type: 'ice-candidate', payload: candidate });
   }
 

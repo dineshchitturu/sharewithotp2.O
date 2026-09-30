@@ -21,6 +21,7 @@ export interface CreateRoomResponse {
   sender_token: string;
   expires_at: string;
   status: TransferState;
+  ice_servers?: RTCIceServer[];
 }
 
 export interface VerifyOTPResponse {
@@ -29,6 +30,7 @@ export interface VerifyOTPResponse {
   status: TransferState;
   message: string;
   attempts_remaining: number | null;
+  ice_servers?: RTCIceServer[];
 }
 
 export interface RoomStatusResponse {
@@ -92,3 +94,21 @@ export async function destroyRoom(roomId: string, token: string): Promise<void> 
     // Ignore cleanup network errors
   }
 }
+
+export async function getIceServers(): Promise<RTCIceServer[]> {
+  try {
+    const url = `${API_BASE}/api/rooms/ice-servers`;
+    const response = await fetch(url);
+    if (response.ok) {
+      const data = await response.json();
+      if (Array.isArray(data.ice_servers) && data.ice_servers.length > 0) {
+        return data.ice_servers;
+      }
+    }
+  } catch (err) {
+    console.warn('[API] Failed to fetch remote ICE servers, falling back to local defaults:', err);
+  }
+  return [];
+}
+
+

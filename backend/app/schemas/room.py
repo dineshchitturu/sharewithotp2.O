@@ -33,6 +33,7 @@ class CreateRoomResponse(BaseModel):
     sender_token: str = Field(..., description="Authentication token for sender signaling connection")
     expires_at: datetime
     status: SessionState = SessionState.WAITING_FOR_RECEIVER
+    ice_servers: Optional[list] = Field(default=None, description="STUN and TURN servers for NAT traversal")
 
 
 class VerifyOTPRequest(BaseModel):
@@ -53,6 +54,7 @@ class VerifyOTPResponse(BaseModel):
     status: SessionState
     message: str
     attempts_remaining: Optional[int] = None
+    ice_servers: Optional[list] = Field(default=None, description="STUN and TURN servers for NAT traversal")
 
 
 class RoomStatusResponse(BaseModel):

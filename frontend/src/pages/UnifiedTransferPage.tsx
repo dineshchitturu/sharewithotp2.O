@@ -174,7 +174,7 @@ export const UnifiedTransferPage: FC = () => {
       signalingRef.current = signaling;
 
       const webrtc = new WebRTCManager(
-        {},
+        { iceServers: resp.ice_servers },
         (candidate) => signaling.sendCandidate(candidate),
         (state) => {
           console.info('[Sender WebRTC State]:', state);
@@ -216,9 +216,9 @@ export const UnifiedTransferPage: FC = () => {
               disconnectTimeoutRef.current = window.setTimeout(() => {
                 if (!isCompletedRef.current && !webrtcRef.current?.isDataChannelOpen()) {
                   setTransferState('FAILED');
-                  setErrorMessage('Direct peer connection failed. Please check network connectivity.');
+                  setErrorMessage('Peer connection could not be established across networks. Please check firewall / WebRTC settings.');
                 }
-              }, 10000);
+              }, 15000);
             }
           }
         }
@@ -417,7 +417,7 @@ export const UnifiedTransferPage: FC = () => {
       signalingRef.current = signaling;
 
       const webrtc = new WebRTCManager(
-        {},
+        { iceServers: verifyResp.ice_servers },
         (candidate) => signaling.sendCandidate(candidate),
         (state) => {
           console.info('[Receiver WebRTC State]:', state);
@@ -453,9 +453,9 @@ export const UnifiedTransferPage: FC = () => {
             disconnectTimeoutRef.current = window.setTimeout(() => {
               if (!isCompletedRef.current && !webrtcRef.current?.isDataChannelOpen()) {
                 setTransferState('FAILED');
-                setErrorMessage('Direct peer connection failed. Please check network connectivity.');
+                setErrorMessage('Peer connection could not be established across networks. Please check firewall / WebRTC settings.');
               }
-            }, 10000);
+            }, 15000);
           }
         },
         (dataChannel) => {

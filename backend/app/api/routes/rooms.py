@@ -8,10 +8,17 @@ from app.schemas.room import (
     VerifyOTPResponse,
     RoomStatusResponse,
 )
+from app.config.settings import get_default_ice_servers
 from app.security.rate_limit import otp_rate_limiter
 from app.services.room_manager import room_manager
 
 router = APIRouter(prefix="/api/rooms", tags=["Rooms"])
+
+
+@router.get("/ice-servers")
+async def get_ice_servers_endpoint():
+    """Return configured ICE servers (STUN + TURN relays) for NAT traversal."""
+    return {"ice_servers": get_default_ice_servers()}
 
 
 @router.post("", response_model=CreateRoomResponse, status_code=status.HTTP_201_CREATED)
@@ -30,6 +37,7 @@ async def create_room(req: Optional[CreateRoomRequest] = None):
             sender_token=session.sender_token,
             expires_at=session.expires_at,
             status=session.state,
+            ice_servers=get_default_ice_servers(),
         )
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
@@ -80,6 +88,7 @@ async def verify_room_otp(room_id: str, req: VerifyOTPRequest, request: Request)
         status=state,
         message=message,
         attempts_remaining=None,
+        ice_servers=get_default_ice_servers(),
     )
 
 

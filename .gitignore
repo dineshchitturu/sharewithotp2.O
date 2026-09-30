@@ -7,6 +7,9 @@ __pycache__/
 backend/venv/
 backend/.pytest_cache/
 .env
+*.env
+backend/.env
+frontend/.env
 
 # Node / Vite / Frontend
 node_modules/

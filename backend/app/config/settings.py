@@ -24,6 +24,8 @@ class Settings(BaseSettings):
         "http://127.0.0.1:5173",
         "http://localhost:3000",
         "http://127.0.0.1:3000",
+        "https://sharewithotp2-o-1.onrender.com",
+        "https://sharewithotp2-o.onrender.com",
     ]
 
     # WebRTC ICE Server Configurations (STUN / TURN)
@@ -51,7 +53,7 @@ class Settings(BaseSettings):
         return v
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=(".env", "backend/.env"),
         env_file_encoding="utf-8",
         case_sensitive=True,
         extra="ignore",
@@ -61,3 +63,58 @@ class Settings(BaseSettings):
 @lru_cache()
 def get_settings() -> Settings:
     return Settings()
+
+
+def get_default_ice_servers() -> List[dict]:
+    """Build multi-provider, multi-port ICE server configuration (STUN + TURN relays).
+    
+    Guarantees reliable WebRTC connection whether peers are on the same local network,
+    behind Symmetric NATs, on mobile cellular (4G/5G) hotspots, or restrictive firewalls.
+    """
+    settings = get_settings()
+
+    # 1. Multi-provider, multi-port STUN servers (UDP & TLS ports 19302, 3478, 443)
+    stun_candidates = [
+        settings.STUN_SERVER_URL,
+        "stun:stun.l.google.com:19302",
+        "stun:stun1.l.google.com:19302",
+        "stun:stun2.l.google.com:19302",
+        "stun:stun3.l.google.com:19302",
+        "stun:stun4.l.google.com:19302",
+        "stun:stun.cloudflare.com:3478",
+        "stun:global.stun.twilio.com:3478",
+        "stun:stun.nextcloud.com:443",
+        "stun:stun.nextcloud.com:3478",
+        "stun:stun.matrix.org:3478",
+        "stun:stun.services.mozilla.com:3478",
+    ]
+    seen_stun = set()
+    unique_stun_urls: List[str] = []
+    for url in stun_candidates:
+        if url and url not in seen_stun:
+            seen_stun.add(url)
+            unique_stun_urls.append(url)
+
+    ice_servers: List[dict] = [{"urls": unique_stun_urls}]
+
+    # 2. Configured TURN server from environment if specified
+    if settings.TURN_SERVER_URL:
+        turn_urls = []
+        for u in settings.TURN_SERVER_URL.split(","):
+            clean_u = u.strip()
+            if not clean_u:
+                continue
+            if not clean_u.startswith("turn:") and not clean_u.startswith("turns:"):
+                clean_u = f"turn:{clean_u}"
+            turn_urls.append(clean_u)
+
+        if turn_urls:
+            turn_entry: dict = {"urls": turn_urls}
+            if settings.TURN_USERNAME:
+                turn_entry["username"] = settings.TURN_USERNAME
+            if settings.TURN_CREDENTIAL:
+                turn_entry["credential"] = settings.TURN_CREDENTIAL
+            ice_servers.append(turn_entry)
+
+    return ice_servers
+

@@ -168,3 +168,84 @@ async def test_create_room_auto_otp():
         assert verify_resp.json()["success"] is True
 
 
+@pytest.mark.asyncio
+async def test_ice_servers_in_room_endpoints():
+    """Verify that ice-servers endpoint, create_room, and verify_room_otp include ice_servers."""
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        # Check /api/rooms/ice-servers
+        ice_resp = await client.get("/api/rooms/ice-servers")
+        assert ice_resp.status_code == 200
+        ice_data = ice_resp.json()
+        assert "ice_servers" in ice_data
+        assert len(ice_data["ice_servers"]) >= 1
+
+        # Check create_room returns ice_servers
+        create_resp = await client.post("/api/rooms", json={})
+        assert create_resp.status_code == 201
+        create_data = create_resp.json()
+        assert "ice_servers" in create_data
+        assert create_data["ice_servers"] is not None
+
+        # Check verify returns ice_servers
+        verify_resp = await client.post(
+            f"/api/rooms/{create_data['room_id']}/verify",
+            json={"otp": create_data["otp"]},
+        )
+        assert verify_resp.status_code == 200
+        verify_data = verify_resp.json()
+        assert "ice_servers" in verify_data
+        assert verify_data["ice_servers"] is not None
+
+
+def test_turn_env_configuration(monkeypatch):
+    """Verify that TURN credentials set via environment variables are loaded and formatted."""
+    from app.config.settings import get_settings, get_default_ice_servers
+
+    monkeypatch.setenv("TURN_SERVER_URL", "relay.example.com:3478,turn:relay.example.com:443?transport=tcp")
+    monkeypatch.setenv("TURN_USERNAME", "testuser")
+    monkeypatch.setenv("TURN_CREDENTIAL", "testpass")
+
+    get_settings.cache_clear()
+    servers = get_default_ice_servers()
+
+    # Find the TURN server entry
+    turn_entries = [s for s in servers if "username" in s and s["username"] == "testuser"]
+    assert len(turn_entries) == 1
+    turn_entry = turn_entries[0]
+    assert turn_entry["credential"] == "testpass"
+    assert "turn:relay.example.com:3478" in turn_entry["urls"]
+    assert "turn:relay.example.com:443?transport=tcp" in turn_entry["urls"]
+
+    get_settings.cache_clear()
+
+
+@pytest.mark.asyncio
+async def test_cors_production_frontend_origin():
+    """Verify that OPTIONS preflight and requests from production frontend origin are allowed by CORS."""
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        # Preflight OPTIONS request
+        options_resp = await client.options(
+            "/api/rooms",
+            headers={
+                "Origin": "https://sharewithotp2-o-1.onrender.com",
+                "Access-Control-Request-Method": "POST",
+                "Access-Control-Request-Headers": "content-type",
+            },
+        )
+        assert options_resp.status_code == 200
+        assert options_resp.headers.get("access-control-allow-origin") == "https://sharewithotp2-o-1.onrender.com"
+
+        # Actual POST request
+        post_resp = await client.post(
+            "/api/rooms",
+            json={},
+            headers={"Origin": "https://sharewithotp2-o-1.onrender.com"},
+        )
+        assert post_resp.status_code == 201
+        assert post_resp.headers.get("access-control-allow-origin") == "https://sharewithotp2-o-1.onrender.com"
+
+
+
+

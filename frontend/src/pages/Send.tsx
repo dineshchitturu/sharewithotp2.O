@@ -89,7 +89,7 @@ export const Send: React.FC<SendProps> = ({ onBack }) => {
       signalingRef.current = signaling;
 
       const webrtc = new WebRTCManager(
-        {},
+        { iceServers: resp.ice_servers },
         (candidate) => signaling.sendCandidate(candidate),
         (state) => {
           console.info('[Sender WebRTC State]:', state);
@@ -135,9 +135,9 @@ export const Send: React.FC<SendProps> = ({ onBack }) => {
               disconnectTimeoutRef.current = window.setTimeout(() => {
                 if (!isCompletedRef.current && !webrtcRef.current?.isDataChannelOpen()) {
                   setTransferState('DISCONNECTED');
-                  setErrorMessage('Peer connection failed. Could not establish direct P2P connection.');
+                  setErrorMessage('Peer connection could not be established across networks. Please check firewall / WebRTC settings.');
                 }
-              }, 10000);
+              }, 15000);
             }
           }
         }
