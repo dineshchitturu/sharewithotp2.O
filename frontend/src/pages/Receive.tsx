@@ -364,14 +364,14 @@ export const Receive: React.FC<ReceiveProps> = ({ onBack }) => {
       <div className="mb-8 flex items-center justify-between">
         <button
           onClick={onBack}
-          className="btn-glass-pill text-xs px-3.5 py-1.5 gap-1.5 text-slate-300 hover:text-white"
+          className="btn-sm btn-secondary gap-1.5 cursor-pointer text-gray-700"
         >
-          <span>← Back to Home</span>
+          <span>&larr; Back to Home</span>
         </button>
         {step !== 'join' && otp && (
-          <span className="badge-luminous-pill font-mono text-xs">
-            <span className="text-slate-400 font-sans">Code:</span>
-            <strong className="text-white font-bold tracking-wider">{otp.length === 6 ? `${otp.slice(0, 3)} ${otp.slice(3)}` : otp}</strong>
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 border border-blue-200 text-blue-700 font-mono text-xs shadow-xs">
+            <span className="text-gray-500 font-sans">Code:</span>
+            <strong className="font-bold tracking-wider">{otp.length === 6 ? `${otp.slice(0, 3)} ${otp.slice(3)}` : otp}</strong>
           </span>
         )}
       </div>

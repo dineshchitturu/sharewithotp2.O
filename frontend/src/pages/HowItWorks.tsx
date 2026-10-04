@@ -10,31 +10,31 @@ export const HowItWorks: React.FC<HowItWorksProps> = ({ onBack, onNavigate }) =>
   const steps = [
     {
       step: '01',
-      icon: <KeyRound className="w-6 h-6 text-cyan-400" />,
+      icon: <KeyRound className="w-5 h-5 text-blue-600" />,
       title: 'Sender Generates Ephemeral 6-Digit OTP',
-      desc: 'The sender selects their file (> 100 MB supported) and clicks Generate Code. The backend generates a random 6-digit one-time password (OTP) stored only as a salted SHA-256 hash in volatile memory.',
+      desc: 'The sender selects their file (> 100 MB supported) and clicks Generate Code. The backend generates a random 6-digit one-time password stored only as a salted SHA-256 hash in volatile RAM.',
     },
     {
       step: '02',
-      icon: <Radio className="w-6 h-6 text-indigo-400" />,
+      icon: <Radio className="w-5 h-5 text-indigo-600" />,
       title: 'Receiver Authenticates with OTP',
       desc: 'The receiver visits ShareWithOTP2.O on their browser, enters the 6-digit OTP (or opens the direct link). The backend validates the salted hash with brute-force rate-limiting and issues a single-use session token.',
     },
     {
       step: '03',
-      icon: <Network className="w-6 h-6 text-purple-400" />,
+      icon: <Network className="w-5 h-5 text-cyan-600" />,
       title: 'WebRTC P2P Handshake',
       desc: 'Both browsers connect to a lightweight signaling relay over WebSockets to exchange session description protocol (SDP) offers and ICE candidates. No file bytes pass through this channel.',
     },
     {
       step: '04',
-      icon: <Download className="w-6 h-6 text-emerald-400" />,
+      icon: <Download className="w-5 h-5 text-emerald-600" />,
       title: 'Direct Browser-to-Browser Streaming',
-      desc: 'An encrypted RTCDataChannel connects directly between the two browsers. The file streams in 64 KB binary chunks with backpressure handling and parallel WebAssembly SHA-256 hashing.',
+      desc: 'An encrypted RTCDataChannel connects directly between the two browsers. The file streams in 1 MB chunks and 64 KB SCTP slices with backpressure handling and parallel WebAssembly SHA-256 hashing.',
     },
     {
       step: '05',
-      icon: <CheckCircle2 className="w-6 h-6 text-teal-400" />,
+      icon: <CheckCircle2 className="w-5 h-5 text-teal-600" />,
       title: 'Integrity Verification & Destruction',
       desc: 'The receiver verifies the cryptographic hash against the sender’s trailer digest, builds the local file for download, and triggers immediate destruction of the temporary room and credentials.',
     },
@@ -46,12 +46,12 @@ export const HowItWorks: React.FC<HowItWorksProps> = ({ onBack, onNavigate }) =>
       <div className="mb-8 flex items-center justify-between">
         <button
           onClick={onBack}
-          className="btn-glass-pill text-xs px-3.5 py-1.5 gap-1.5 text-slate-300 hover:text-white"
+          className="btn-sm btn-secondary gap-1.5 cursor-pointer text-gray-700"
         >
           <ArrowLeft className="w-3.5 h-3.5" />
           <span>Back to Home</span>
         </button>
-        <span className="text-xs font-mono text-slate-400">
+        <span className="text-xs font-mono text-gray-500">
           ShareWithOTP2.O • Architecture
         </span>
       </div>
@@ -59,15 +59,15 @@ export const HowItWorks: React.FC<HowItWorksProps> = ({ onBack, onNavigate }) =>
       {/* Header */}
       <div className="text-center mb-12">
         <div className="inline-flex items-center gap-2 mb-3">
-          <span className="badge-luminous-pill">
-            <Network className="w-3.5 h-3.5 text-cyan-400" />
-            <span>How It Works</span>
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 border border-blue-200 text-blue-700 text-xs font-semibold">
+            <Network className="w-3.5 h-3.5 text-blue-600" />
+            <span>Workflow & Protocol</span>
           </span>
         </div>
-        <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-white mb-3">
+        <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-gray-900 mb-3">
           How P2P File Sharing Works
         </h1>
-        <p className="text-sm sm:text-base text-slate-300 max-w-xl mx-auto">
+        <p className="text-base text-gray-600 max-w-xl mx-auto leading-relaxed">
           Learn how ShareWithOTP2.O streams large files directly between devices without uploading or storing a single byte on a server.
         </p>
       </div>
@@ -77,39 +77,39 @@ export const HowItWorks: React.FC<HowItWorksProps> = ({ onBack, onNavigate }) =>
         {steps.map((item, idx) => (
           <div
             key={idx}
-            className="flex flex-col sm:flex-row items-start gap-4 p-5 sm:p-6 glass-panel-interactive rounded-2xl"
+            className="flex flex-col sm:flex-row items-start gap-4 p-5 sm:p-6 simple-card bg-white"
           >
             <div className="flex items-center gap-3 shrink-0">
-              <span className="text-lg font-mono font-black text-cyan-400/70 sm:w-8">
+              <span className="text-lg font-mono font-bold text-blue-600 sm:w-8">
                 {item.step}
               </span>
-              <div className="w-12 h-12 rounded-xl bg-[#071329] border border-white/15 flex items-center justify-center shadow-inner">
+              <div className="w-10 h-10 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center shadow-xs">
                 {item.icon}
               </div>
             </div>
 
             <div className="flex-1">
-              <h3 className="text-base font-bold text-white mb-1.5">{item.title}</h3>
-              <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">{item.desc}</p>
+              <h3 className="text-base font-bold text-gray-900 mb-1">{item.title}</h3>
+              <p className="text-xs sm:text-sm text-gray-600 leading-relaxed">{item.desc}</p>
             </div>
           </div>
         ))}
       </div>
 
       {/* Comparison: Traditional vs ShareWithOTP2.O */}
-      <div className="glass-panel rounded-3xl p-6 md:p-8 mb-12 relative overflow-hidden">
-        <h2 className="text-xl font-bold text-white mb-6 text-center">
+      <div className="simple-card rounded-2xl p-6 sm:p-8 mb-12 bg-white">
+        <h2 className="text-xl font-bold text-gray-900 mb-6 text-center">
           Traditional Cloud Sharing vs ShareWithOTP2.O
         </h2>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* Traditional */}
-          <div className="bg-rose-950/20 border border-rose-500/20 rounded-2xl p-5 sm:p-6 backdrop-blur-md">
-            <div className="flex items-center gap-2 mb-3 text-rose-400 font-semibold text-sm">
-              <XCircle className="w-4 h-4" />
+          <div className="bg-rose-50/70 border border-rose-200 rounded-xl p-5 sm:p-6">
+            <div className="flex items-center gap-2 mb-3 text-rose-700 font-semibold text-sm">
+              <XCircle className="w-4 h-4 text-rose-600" />
               <span>Traditional Cloud Uploads</span>
             </div>
-            <ul className="space-y-2 text-xs text-slate-300">
+            <ul className="space-y-2 text-xs sm:text-sm text-gray-600">
               <li>• File is uploaded to and saved on a central third-party server</li>
               <li>• Double bandwidth cost: Upload to cloud, then download from cloud</li>
               <li>• Files persist in databases or buckets until manually deleted</li>
@@ -119,12 +119,12 @@ export const HowItWorks: React.FC<HowItWorksProps> = ({ onBack, onNavigate }) =>
           </div>
 
           {/* ShareWithOTP2.O */}
-          <div className="bg-cyan-950/20 border border-cyan-500/30 rounded-2xl p-5 sm:p-6 backdrop-blur-md shadow-[0_0_25px_rgba(6,182,212,0.1)]">
-            <div className="flex items-center gap-2 mb-3 text-cyan-300 font-semibold text-sm">
-              <ShieldCheck className="w-4 h-4 text-cyan-400" />
+          <div className="bg-blue-50/70 border border-blue-200 rounded-xl p-5 sm:p-6 shadow-xs">
+            <div className="flex items-center gap-2 mb-3 text-blue-700 font-semibold text-sm">
+              <ShieldCheck className="w-4 h-4 text-emerald-600" />
               <span>ShareWithOTP2.O Direct P2P</span>
             </div>
-            <ul className="space-y-2 text-xs text-slate-200">
+            <ul className="space-y-2 text-xs sm:text-sm text-gray-700">
               <li>• Direct browser-to-browser WebRTC DataChannel streaming</li>
               <li>• Single direct transit: Fast local or global transfer speed</li>
               <li>• Zero server file storage: Files never touch backend disk</li>
@@ -139,15 +139,17 @@ export const HowItWorks: React.FC<HowItWorksProps> = ({ onBack, onNavigate }) =>
       <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
         <button
           onClick={() => onNavigate('send')}
-          className="w-full sm:w-auto btn-luminous-pill px-8 py-3.5 text-sm gap-2"
+          className="w-full sm:w-auto btn btn-primary px-8 py-3 text-sm font-semibold shadow-md cursor-pointer"
         >
-          Send a File Now →
+          <span>Send a File Now</span>
+          <span className="ml-1 text-blue-200">-&gt;</span>
         </button>
         <button
           onClick={() => onNavigate('receive')}
-          className="w-full sm:w-auto btn-glass-pill px-8 py-3.5 text-sm gap-2 border-emerald-400/40 text-emerald-300 hover:bg-emerald-950/30"
+          className="w-full sm:w-auto btn btn-secondary px-8 py-3 text-sm font-semibold cursor-pointer"
         >
-          Receive a File →
+          <span>Receive a File</span>
+          <span className="ml-1 text-gray-400">-&gt;</span>
         </button>
       </div>
     </div>

@@ -13,81 +13,81 @@ export const ConnectionStatus: React.FC<ConnectionStatusProps> = ({ state }) => 
         return {
           dotClass: 'bg-amber-400 animate-ping',
           solidClass: 'bg-amber-500',
-          textClass: 'text-amber-300 border-amber-500/30 bg-amber-950/40',
+          textClass: 'text-amber-700 border-amber-200 bg-amber-50',
           label: 'Waiting for receiver...',
         };
       case 'RECEIVER_AUTHENTICATED':
       case 'SIGNALING':
       case 'CONNECTING':
         return {
-          dotClass: 'bg-sky-400 animate-ping',
-          solidClass: 'bg-sky-500',
-          textClass: 'text-sky-300 border-sky-500/30 bg-sky-950/40',
+          dotClass: 'bg-blue-400 animate-ping',
+          solidClass: 'bg-blue-500',
+          textClass: 'text-blue-700 border-blue-200 bg-blue-50',
           label: 'Connecting securely...',
         };
       case 'CONNECTED':
         return {
           dotClass: 'bg-emerald-400',
           solidClass: 'bg-emerald-500',
-          textClass: 'text-emerald-300 border-emerald-500/30 bg-emerald-950/40',
+          textClass: 'text-emerald-700 border-emerald-200 bg-emerald-50',
           label: 'P2P Connected ✓',
         };
       case 'TRANSFERRING':
         return {
-          dotClass: 'bg-indigo-400 animate-pulse',
-          solidClass: 'bg-indigo-500',
-          textClass: 'text-indigo-300 border-indigo-500/30 bg-indigo-950/40',
+          dotClass: 'bg-blue-500 animate-pulse',
+          solidClass: 'bg-blue-600',
+          textClass: 'text-blue-700 border-blue-200 bg-blue-50',
           label: 'Transferring P2P...',
         };
       case 'VERIFYING':
         return {
           dotClass: 'bg-purple-400 animate-pulse',
           solidClass: 'bg-purple-500',
-          textClass: 'text-purple-300 border-purple-500/30 bg-purple-950/40',
-          label: 'Verifying SHA-256 Hash...',
+          textClass: 'text-purple-700 border-purple-200 bg-purple-50',
+          label: 'Verifying SHA-256...',
         };
       case 'COMPLETED':
         return {
           dotClass: 'bg-emerald-400',
           solidClass: 'bg-emerald-500',
-          textClass: 'text-emerald-300 border-emerald-500/30 bg-emerald-950/40',
+          textClass: 'text-emerald-700 border-emerald-200 bg-emerald-50',
           label: 'Transfer Complete ✓',
         };
       case 'DESTROYED':
         return {
-          dotClass: 'bg-slate-400',
-          solidClass: 'bg-slate-500',
-          textClass: 'text-slate-400 border-slate-700 bg-slate-900/60',
+          dotClass: 'bg-gray-400',
+          solidClass: 'bg-gray-500',
+          textClass: 'text-gray-600 border-gray-200 bg-gray-50',
           label: 'Session Destroyed',
         };
       case 'CANCELLED':
         return {
           dotClass: 'bg-rose-400',
           solidClass: 'bg-rose-500',
-          textClass: 'text-rose-300 border-rose-500/30 bg-rose-950/40',
+          textClass: 'text-rose-700 border-rose-200 bg-rose-50',
           label: 'Transfer Cancelled',
         };
       case 'EXPIRED':
         return {
           dotClass: 'bg-rose-400',
           solidClass: 'bg-rose-500',
-          textClass: 'text-rose-300 border-rose-500/30 bg-rose-950/40',
+          textClass: 'text-rose-700 border-rose-200 bg-rose-50',
           label: 'Room Expired',
         };
       case 'LOCKED':
         return {
           dotClass: 'bg-rose-400',
           solidClass: 'bg-rose-500',
-          textClass: 'text-rose-300 border-rose-500/30 bg-rose-950/40',
+          textClass: 'text-rose-700 border-rose-200 bg-rose-50',
           label: 'Session Locked (5 Failed OTPs)',
         };
       case 'FAILED':
       case 'DISCONNECTED':
       default:
         return {
-          dotClass: 'bg-slate-400',
-          solidClass: 'bg-slate-500',
-          textClass: 'text-slate-400 border-slate-700 bg-slate-900/60',
+          dotClass: 'bg-gray-400',
+          solidClass: 'bg-gray-500',
+          textClass: 'text-gray-600 border-gray-200 bg-gray-50',
           label: 'Disconnected',
         };
     }
@@ -96,7 +96,7 @@ export const ConnectionStatus: React.FC<ConnectionStatusProps> = ({ state }) => 
   const badge = getBadge();
 
   return (
-    <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs font-medium ${badge.textClass}`}>
+    <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-full border text-xs font-medium shadow-xs ${badge.textClass}`}>
       <span className="relative flex h-2 w-2">
         <span className={`absolute inline-flex h-full w-full rounded-full opacity-75 ${badge.dotClass}`}></span>
         <span className={`relative inline-flex rounded-full h-2 w-2 ${badge.solidClass}`}></span>

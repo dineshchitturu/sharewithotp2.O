@@ -391,14 +391,14 @@ export const Send: React.FC<SendProps> = ({ onBack }) => {
       <div className="mb-8 flex items-center justify-between">
         <button
           onClick={onBack}
-          className="btn-glass-pill text-xs px-3.5 py-1.5 gap-1.5 text-slate-300 hover:text-white"
+          className="btn-sm btn-secondary gap-1.5 cursor-pointer text-gray-700"
         >
-          <span>← Back to Home</span>
+          <span>&larr; Back to Home</span>
         </button>
         {step !== 'create' && otp && (
-          <span className="badge-luminous-pill font-mono text-xs">
-            <span className="text-slate-400 font-sans">Code:</span>
-            <strong className="text-white font-bold tracking-wider">{otp.length === 6 ? `${otp.slice(0, 3)} ${otp.slice(3)}` : otp}</strong>
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 border border-blue-200 text-blue-700 font-mono text-xs shadow-xs">
+            <span className="text-gray-500 font-sans">Code:</span>
+            <strong className="font-bold tracking-wider">{otp.length === 6 ? `${otp.slice(0, 3)} ${otp.slice(3)}` : otp}</strong>
           </span>
         )}
       </div>
@@ -422,18 +422,18 @@ export const Send: React.FC<SendProps> = ({ onBack }) => {
             <button
               onClick={handleCreateTransfer}
               disabled={isLoading || !selectedFile}
-              className="w-full btn-luminous-pill py-4 px-6 text-sm font-bold gap-2.5 shadow-xl shadow-cyan-500/20"
+              className="w-full btn btn-primary py-3.5 px-6 text-sm font-semibold gap-2 shadow-md cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isLoading ? (
                 <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
               ) : (
                 <>
-                  <Sparkles className="w-4 h-4 text-cyan-200" />
+                  <Sparkles className="w-4 h-4 text-blue-200" />
                   <span>Generate One-Time Code & Share</span>
                 </>
               )}
             </button>
-            <p className="text-center text-xs text-slate-400 mt-3 font-medium">
+            <p className="text-center text-xs text-gray-500 mt-3 font-medium">
               Direct peer-to-peer WebRTC transfer • Zero server storage
             </p>
           </div>
