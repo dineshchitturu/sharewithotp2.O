@@ -64,8 +64,8 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
 
             {/* Main Headline */}
             <h1 className="mb-6 border-y border-gray-200/80 [border-image:linear-gradient(to_right,transparent,var(--color-gray-300),transparent)1] py-3 text-4xl sm:text-5xl md:text-6xl font-extrabold text-gray-900 tracking-tight leading-[1.12]">
-              The fastest P2P file transfer <br className="hidden sm:inline" />
-              you've been looking for
+              Share Large Files Directly <br className="hidden sm:inline" />
+              Between Devices
             </h1>
 
             {/* Subordinate Body Text */}
